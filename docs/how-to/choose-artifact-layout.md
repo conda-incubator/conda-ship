@@ -100,8 +100,9 @@ demo info
 ```
 
 This is useful when the runtime must install without network access and you do
-not want a separate bundle file. The tradeoff is a larger binary and slower
-builds.
+not want a separate bundle file. The tradeoff is a larger binary, slower builds,
+and additional temporary storage during bootstrap. Budget for a verified copy
+of the compressed embedded bundle in addition to the extracted packages.
 
 ## Decision Table
 

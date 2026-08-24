@@ -100,6 +100,17 @@ The package is update transport. A directly owned runtime downloads and
 inspects it before replacing the outer executable. It is not installed into the
 managed prefix. conda-ship does not index or upload the package.
 
+```{important}
+A Windows runtime built with conda-ship 0.8.0 or earlier cannot validate a
+0.9.0 update candidate because its reader expects the legacy trailing footer.
+An adopting installer or package manager must call `v1/record-installation` to
+record external ownership during replacement, before the new executable's first
+normal invocation. An installation that must remain directly managed needs a
+fresh install that does not reuse its old direct-install metadata. Once a 0.9.0
+runtime is installed, later native updates can use packages made from finalized
+0.9.0 artifacts.
+```
+
 For GitHub Action builds, `cs-path` is the absolute path to the downloaded
 builder. Use that output for the post-sign packaging step:
 
@@ -230,5 +241,7 @@ For GitHub Action builds, also keep the release attestation checks enabled in
 the action. They verify the conda-ship tools used to stamp the downstream
 runtime.
 
-For release workflows, also attest the full output directory before publishing
-it. See {doc}`verify-release-artifacts` for a GitHub Actions example.
+For release workflows, attest the unchanged output directory before signing.
+After signing, attest the finalized executable separately or generate and
+attest a downstream final manifest. See {doc}`verify-release-artifacts` for the
+complete sequence.

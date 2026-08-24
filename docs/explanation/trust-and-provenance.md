@@ -123,16 +123,18 @@ start at that offset. It does not search signature or certificate data.
 Platform signature verification and runtime-data checksum verification remain
 separate checks. Distribution workflows should require both.
 
-The builder copies, stamps, signs, and hashes artifacts in a restricted staging
-directory on the output filesystem, with mode `0700` on Unix. Publication of
-one artifact stem is serialized. The builder removes an old `.sha256`
-completion marker before it replaces payload files, then publishes the new
-manifest last. Ordinary signing or rename failures therefore cannot leave an
-old manifest beside a mixed set. This is not a transaction across every
-sidecar file and it is not a power-loss durability guarantee. Concurrent builds
-must use separate project roots because bundle and lock intermediates are
-shared before publication. The output directory, its parent chain, and the same
-operating-system account must remain trusted during a build.
+The builder copies and stamps artifacts in a restricted staging directory on
+the output filesystem, with mode `0700` on Unix. Native macOS builds also
+receive a temporary ad hoc signature there. Hashing completes before
+publication on every platform. Publication of one artifact stem is serialized.
+The builder removes an old `.sha256` completion marker before it replaces
+payload files, then publishes the new manifest last. Ordinary signing or rename
+failures therefore cannot leave an old manifest beside a mixed set. This is not
+a transaction across every sidecar file and it is not a power-loss durability
+guarantee. Concurrent builds must use separate project roots because bundle and
+lock intermediates are shared before publication. The output directory, its
+parent chain, and the same operating-system account must remain trusted during
+a build.
 
 A custom runtime template is trusted executable input. For Mach-O and PE,
 conda-ship requires an exact, versioned reader ABI declaration in a dedicated

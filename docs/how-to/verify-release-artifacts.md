@@ -130,12 +130,15 @@ find /tmp/demo-bundle -maxdepth 2 -type f
 The runtime verifies package archive hashes against the runtime lock before
 installing. Embedded bundles are verified by the runtime before extraction.
 
-## Add Downstream Signing And Release Controls
+## Preserve The Build Record Before Signing
 
-conda-ship does not sign downstream runtime artifacts. Sign after `cs build`,
-when the final files are staged and checksums are written.
+conda-ship gives native macOS builds a temporary ad hoc signature so the
+stamped Mach-O remains valid. It does not apply a downstream Developer ID or
+Authenticode identity. The generated `.sha256` and the binary checksum in
+`.info.json` describe the exact `cs build` output.
 
-In GitHub Actions, attest the complete `dist-path` output:
+Verify that unchanged output first. In GitHub Actions, you can also attest the
+complete pre-sign `dist-path`:
 
 ```{warning}
 Use the latest reviewed `actions/attest` release in your workflow and pin it by
@@ -156,17 +159,91 @@ steps:
     with:
       conda-ship-version: "X.Y.Z"
 
-  - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+  - name: Attest unchanged conda-ship output
+    uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
     with:
       subject-path: ${{ steps.cs.outputs.dist-path }}/*
 ```
 
 That attests the runtime binary, `.runtime.lock`, `.packages.txt`, `.cdx.json`,
 `.info.json`, `.sha256`, and the optional external bundle as the output of the
-downstream workflow. Verify a published file against that workflow identity:
+downstream workflow. Signing the runtime afterward changes its digest, so do
+not present these sidecars as a checksum set for the signed executable.
+
+## Sign And Verify A Finalized Runtime
+
+Sign a copy so the original build record remains available. On macOS, replace
+the ad hoc signature with the downstream identity and policy:
 
 ```bash
-gh attestation verify dist/demo \
+set -euo pipefail
+: "${SIGNING_IDENTITY:?Set SIGNING_IDENTITY to the Developer ID identity}"
+: "${APPLE_TEAM_ID:?Set APPLE_TEAM_ID to the expected Team ID}"
+mkdir -p final
+cp dist/demo final/demo
+codesign --force --options runtime --timestamp \
+  --sign "$SIGNING_IDENTITY" final/demo
+developer_id_requirement="=anchor apple generic and "
+developer_id_requirement+="certificate leaf[field.1.2.840.113635.100.6.1.13] exists and "
+developer_id_requirement+="certificate leaf[subject.OU] = \"$APPLE_TEAM_ID\""
+codesign --verify --deep --strict --verbose=4 \
+  -R"$developer_id_requirement" final/demo
+```
+
+After notarization, assess the same final executable with Gatekeeper:
+
+```bash
+spctl --assess --type execute --verbose=4 final/demo
+```
+
+On Windows, sign the stamped executable, then require both SignTool and
+PowerShell to report a valid Authenticode signature:
+
+```powershell
+$ErrorActionPreference = "Stop"
+New-Item -ItemType Directory -Force final | Out-Null
+Copy-Item dist\demo.exe final\demo.exe
+signtool sign /fd SHA256 /td SHA256 /tr $env:TIMESTAMP_URL `
+  /sha1 $env:SIGNING_CERTIFICATE_THUMBPRINT final\demo.exe
+if ($LASTEXITCODE -ne 0) {
+  throw "SignTool signing failed"
+}
+signtool verify /pa /v final\demo.exe
+if ($LASTEXITCODE -ne 0) {
+  throw "SignTool verification failed"
+}
+$signature = Get-AuthenticodeSignature -LiteralPath final\demo.exe
+if ($signature.Status -ne "Valid") {
+  throw "Authenticode verification failed: $($signature.StatusMessage)"
+}
+```
+
+Run the downstream distribution's runtime smoke test against the finalized
+file after native signature verification. Platform signature verification and
+runtime-data checksum verification are separate requirements.
+
+## Attest The Finalized Bytes
+
+Generate a new checksum or manifest for the signed executable. Do not overwrite
+the original conda-ship `.sha256` or `.info.json`. For example, on macOS:
+
+```bash
+(cd final && shasum -a 256 demo > SHA256SUMS)
+```
+
+Then attest the finalized executable and its new manifest as a separate output:
+
+```yaml
+- name: Attest finalized runtime
+  uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+  with:
+    subject-path: final/*
+```
+
+Verify the finalized executable against that workflow identity:
+
+```bash
+gh attestation verify final/demo \
   --repo OWNER/REPO \
   --signer-workflow OWNER/REPO/.github/workflows/release.yml
 ```

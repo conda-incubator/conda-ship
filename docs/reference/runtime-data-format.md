@@ -36,11 +36,12 @@ lengths and checksums therefore provide a signed anchor to that appended
 payload even when an Authenticode implementation does not hash bytes past the
 last declared section.
 
-Windows artifacts must be unsigned and have no existing overlay when stamped.
-They must be Authenticode signed afterward. For an unsigned stamped PE, the
-derived payload end is physical EOF. For a signed PE, the Security Directory
-certificate offset must equal that same signed-derived end, and the structurally
-valid certificate table must end at physical EOF.
+Windows templates must be unsigned and have no existing overlay when stamped.
+Downstream release workflows apply any required Authenticode identity after
+stamping. Unsigned local builds remain structurally readable. For an unsigned
+stamped PE, the derived payload end is physical EOF. For a signed PE, the
+Security Directory certificate offset must equal that same signed-derived end,
+and the structurally valid certificate table must end at physical EOF.
 
 The reader selects exactly one platform-defined footer. On Mach-O, it uses
 `LC_CODE_SIGNATURE.dataoff` when a signature exists and permits only the
@@ -147,13 +148,19 @@ Generated runtimes are expected to read the format written by the same
 conda-ship release family. Downstream tools should treat the staged runtime as
 an opaque executable plus documented artifact metadata files.
 
-Current builders require Mach-O and PE templates with a versioned
-signed-layout reader ABI declaration emitted by the matching
-`cs-template` build. Mach-O stores the exact record in the dedicated
+Starting with 0.9.0, builders require Mach-O and PE templates with a versioned
+signed-layout reader ABI declaration emitted by the matching `cs-template`
+build. Templates from 0.8.0 and earlier do not contain this declaration and are
+rejected. Mach-O stores the exact record in the dedicated
 `__TEXT,__cship_reader` section. PE stores it in the dedicated read-only
 `.cscap` section. The builder rejects missing, duplicate, misplaced, malformed,
-or unknown records. Unmodified pre-fix templates are therefore rejected and
-must be replaced instead of restamped with a current builder.
+or unknown records. Linux templates do not use this declaration.
+
+Existing artifacts retain their legacy reader, and 0.9.0 does not repair their
+signing defect. Rebuild macOS and Windows runtimes with a matching 0.9.0 builder
+and template, then apply the downstream platform signature. Re-signing an older
+stamped macOS artifact does not repair its invalid native layout, and signing an
+older Windows overlay does not cover its runtime data.
 
 The capability record is a self-declared compatibility signal. It does not
 prove the behavior or provenance of the executable that contains it. A party
@@ -169,6 +176,14 @@ The reader retains compatibility with unsigned version-one PE artifacts whose
 footer ends at EOF. It deliberately rejects signed legacy PE overlays because
 their footer is outside declared sections and has no authenticated selection
 anchor.
+
+A Windows runtime built with 0.8.0 or earlier expects the legacy trailing
+footer and cannot validate a 0.9.0 executable update candidate. An adopting
+installer or package manager must record external ownership during replacement,
+before the new executable's first normal invocation. An installation that must
+remain directly managed needs a fresh install that does not reuse its old
+direct-install metadata. After a 0.9.0 runtime is installed, publish update
+packages made from finalized 0.9.0 artifacts for later native updates.
 
 Use `.info.json`, `.runtime.lock`, `.packages.txt`, `.cdx.json`, and `.sha256`
 for release automation instead of parsing the runtime data block directly.
