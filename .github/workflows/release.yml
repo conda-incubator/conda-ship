@@ -661,8 +661,8 @@ jobs:
             (cd "$DIST_PATH" && shasum --algorithm 256 --check "$manifest")
           fi
 
-      - name: Verify macOS action output signature
-        if: contains(matrix.target, 'apple-darwin')
+      - name: Verify tagged macOS action output signature
+        if: github.event_name == 'push' && contains(matrix.target, 'apple-darwin')
         shell: bash
         env:
           BINARY_PATH: ${{ steps.released_action.outputs.binary-path || steps.tagged_action.outputs.binary-path }}
