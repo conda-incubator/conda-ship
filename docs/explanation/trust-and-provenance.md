@@ -90,12 +90,58 @@ documentation, access, publication, and retention policy.
 
 ## Downstream Signing And Attestation
 
-Sign or attest after conda-ship has staged the files. For executable updates,
-sign the runtime before running `cs package-update --binary`. That ensures the
-package contains and reports the finalized bytes. The GitHub Action exposes
-`dist-path` so downstream workflows can attest the complete output set:
-the runtime binary, `.runtime.lock`, `.packages.txt`, `.cdx.json`, `.info.json`,
-`.sha256`, and optional external bundle.
+The GitHub Action exposes `dist-path` so downstream workflows can attest the
+exact conda-ship build output: the runtime binary, `.runtime.lock`,
+`.packages.txt`, `.cdx.json`, `.info.json`, `.sha256`, and optional external
+bundle. Verify `.sha256` before attesting that set.
+
+Developer ID or Authenticode signing after the build changes the executable.
+The conda-ship `.sha256` file and the binary checksum inside `.info.json` then
+remain records of the earlier build output. Do not attest the post-sign
+directory as one internally consistent conda-ship artifact set. Attest the
+final executable separately, or have the downstream release workflow generate
+and attest its own final manifest. For executable updates, sign the runtime
+before running `cs package-update --binary`. That command snapshots and reports
+the finalized executable bytes for the update package. It does not rewrite the
+original build metadata.
+
+Native macOS builds are ad hoc signed after conda-ship extends the Mach-O
+`__LINKEDIT` segment over appended runtime data. Replace that temporary
+signature with the downstream Developer ID signature. Cross-built macOS
+artifacts remain unsigned until they are finalized on macOS. The temporary
+signature does not preserve the identifier, designated requirements,
+entitlements, library constraints, launch constraints, or hardened-runtime
+flags from a custom input template. Apply the required policy during downstream
+signing. Windows Authenticode signing must also run after stamping. The signed
+PE `.cship` section contains the footer and its hashes of the appended JSON
+header and optional bundle.
+
+At runtime, conda-ship locates the Mach-O footer immediately before the code
+signature. On PE, it reads the footer only from `.cship`, derives the appended
+payload end from signed footer lengths, and requires any certificate table to
+start at that offset. It does not search signature or certificate data.
+Platform signature verification and runtime-data checksum verification remain
+separate checks. Distribution workflows should require both.
+
+The builder copies, stamps, signs, and hashes artifacts in a restricted staging
+directory on the output filesystem, with mode `0700` on Unix. Publication of
+one artifact stem is serialized. The builder removes an old `.sha256`
+completion marker before it replaces payload files, then publishes the new
+manifest last. Ordinary signing or rename failures therefore cannot leave an
+old manifest beside a mixed set. This is not a transaction across every
+sidecar file and it is not a power-loss durability guarantee. Concurrent builds
+must use separate project roots because bundle and lock intermediates are
+shared before publication. The output directory, its parent chain, and the same
+operating-system account must remain trusted during a build.
+
+A custom runtime template is trusted executable input. For Mach-O and PE,
+conda-ship requires an exact, versioned reader ABI declaration in a dedicated
+linker-created image section and rejects unmodified templates from before the
+signed-layout reader fix. The record is a self-declared compatibility check,
+not proof of reader behavior or template provenance. Verify a downloaded
+template against the matching conda-ship release attestation or checksum before
+using it. A party able to replace a trusted template can forge the declaration
+or replace the program it contains, regardless of the runtime-data format.
 
 Good places for downstream release controls include:
 
@@ -129,7 +175,8 @@ still checked against the same package and payload hashes.
 conda-ship does not:
 
 - decide which channels are trusted for a downstream distribution
-- sign downstream runtime artifacts
+- apply a distribution identity or release signature to downstream runtime
+  artifacts
 - make a wrapper installer trustworthy by itself
 - replace review of committed source lockfiles
 - hide the need for package-manager or platform signing

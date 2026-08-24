@@ -10,6 +10,8 @@ on:
       - ".github/workflows/release.yml"
       - "prek.toml"
       - "action.yml"
+      - "CHANGELOG.md"
+      - "docs/**"
       - "src/**"
       - "tests/**"
       - "python/**"
@@ -27,6 +29,8 @@ on:
       - ".github/workflows/release.yml"
       - "prek.toml"
       - "action.yml"
+      - "CHANGELOG.md"
+      - "docs/**"
       - "src/**"
       - "tests/**"
       - "python/**"
@@ -55,6 +59,8 @@ jobs:
             os: ubuntu-24.04-arm
           - target: aarch64-apple-darwin
             os: macos-15
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
           - target: x86_64-pc-windows-msvc
             os: windows-latest
     env:
@@ -156,6 +162,42 @@ jobs:
             --target-label "$TARGET" \
             --template "$template"
 
+      - name: Verify published artifact manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd dist
+          for manifest in "demo-${TARGET}.sha256" "demoz-${TARGET}.sha256"; do
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum --check "$manifest"
+            else
+              shasum --algorithm 256 --check "$manifest"
+            fi
+          done
+
+      - name: Verify macOS runtime signatures
+        if: contains(matrix.target, 'apple-darwin')
+        shell: bash
+        run: |
+          python3 tests/ci/verify_macos_runtime_signatures.py \
+            --cs ./target/release/cs \
+            --dist-dir ./dist \
+            --target "$TARGET" \
+            --temp-dir "$RUNNER_TEMP"
+
+      - name: Verify Windows runtime signature coverage
+        if: contains(matrix.target, 'windows-msvc')
+        timeout-minutes: 10
+        shell: powershell
+        run: |
+          ./tests/ci/verify_windows_runtime_signatures.ps1 `
+            -Target $env:TARGET `
+            -TemporaryDirectory $env:RUNNER_TEMP `
+            -RuntimePrefix (Join-Path $env:RUNNER_TEMP "demo-smoke") `
+            -DistDirectory ./dist `
+            -CsExecutable ./target/release/cs.exe
+
       - name: Smoke test embedded bundle
         shell: bash
         run: |
@@ -239,6 +281,24 @@ jobs:
         run: |
           pixi run --locked -e test ruff-check
           pixi run --locked -e test ruff-format-check
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          environments: docs
+          cache: true
+
+      - name: Build documentation with warnings denied
+        run: >-
+          pixi run --locked -e docs
+          sphinx-build -W -b dirhtml docs docs/_build/dirhtml
 
   lint:
     name: Lint

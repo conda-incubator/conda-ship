@@ -2,6 +2,34 @@
 
 All notable changes to `conda-ship` are documented here.
 
+## Unreleased
+
+### Fixed
+
+- Extended the Mach-O `__LINKEDIT` segment over appended macOS runtime data and
+  ad hoc signed native builds after stamping so generated runtimes remain valid
+  Mach-O code and can receive a downstream Developer ID signature.
+- Anchored runtime-data footer selection before the Mach-O code signature and
+  in an Authenticode-covered PE `.cship` section so unsigned signature or
+  certificate padding cannot shadow authenticated runtime identity and update
+  policy.
+- Made runtime stamping failure-atomic and bounded malformed Mach-O load-command
+  allocation. Mach-O signatures larger than 16 MiB no longer hide a valid
+  runtime stamp.
+- Required a versioned reader ABI declaration in dedicated Mach-O and PE image
+  sections. This rejects unmodified pre-fix templates whose embedded reader
+  could search mutable signature data. Builders and templates for those
+  platforms must now come from the same conda-ship release family.
+- Rejected mismatched template architectures and image kinds, non-executable or
+  non-macOS images, overlapping or overwritten Mach-O link-edit data, malformed
+  PE section layouts, and PE32+ images beyond the loader size limit. Artifact
+  signing and hashing now finish in restricted staging before per-artifact
+  publication, with the checksum manifest published last. Changing a same-stem
+  artifact from `external` to another layout now retires the obsolete external
+  bundle.
+- Snapshotted an embedded bundle after checksum verification so later pathname
+  replacement cannot change the bytes passed to decompression and extraction.
+
 ## 0.8.0 - 2026-08-22
 
 ### Added

@@ -1,3 +1,5 @@
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use assert_cmd::cargo::cargo_bin;
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use tempfile::TempDir;
@@ -37,4 +39,27 @@ source-environment = "ship"
             .unwrap()
             .contains("conda workspace lock")
     );
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[test]
+fn test_builder_binary_is_not_accepted_as_runtime_template() {
+    cargo_bin_cmd!("cs")
+        .args([
+            "build",
+            "--dry-run",
+            "--runtime-name",
+            "builder-template",
+            "--delegate-executable",
+            "conda",
+            "--template",
+            cargo_bin!("cs").to_str().unwrap(),
+            "--root",
+            env!("CARGO_MANIFEST_DIR"),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "conda_ship::runtime_template_incompatible",
+        ));
 }

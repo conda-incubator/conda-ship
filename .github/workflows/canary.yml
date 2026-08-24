@@ -205,6 +205,14 @@ jobs:
           fi
           grep -q "runtime template, not a runnable conda runtime" template-error.txt
 
+      - name: Validate native builder and template pair
+        shell: bash
+        run: |
+          python tests/ci/validate_runtime_pair.py native \
+            --target "$TARGET" \
+            --platform win-arm64 \
+            --scratch-root "$RUNNER_TEMP"
+
   package-wheels:
     name: Package PyPI wheel (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -217,17 +225,23 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             manylinux: "2_17"
+            platform: linux-64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
             manylinux: "2_17"
+            platform: linux-aarch64
           - target: x86_64-apple-darwin
             os: macos-15-intel
+            platform: osx-64
           - target: aarch64-apple-darwin
             os: macos-15
+            platform: osx-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            platform: win-64
           - target: aarch64-pc-windows-msvc
             os: windows-11-arm
+            platform: win-arm64
 
     steps:
       - name: Verify runner target
@@ -270,6 +284,21 @@ jobs:
           manylinux: ${{ matrix.manylinux || 'auto' }}
           sccache: true
           args: --release --locked -o dist-pypi
+
+      - name: Validate packaged builder and template pair
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          python_cmd="python3"
+          if [[ "$TARGET" == *"windows"* ]]; then
+            python_cmd="python"
+          fi
+          "$python_cmd" tests/ci/validate_runtime_pair.py wheel \
+            --target "$TARGET" \
+            --platform "$PLATFORM" \
+            --scratch-root "$RUNNER_TEMP"
 
   package-sdist:
     name: Package PyPI sdist

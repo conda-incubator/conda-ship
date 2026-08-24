@@ -626,12 +626,9 @@ mod tests {
         let (info, binary) = write_fixture(tmp.path(), "online");
         let finalized = tmp.path().join("signed-demo");
         fs::copy(binary, &finalized).unwrap();
-        OpenOptions::new()
-            .append(true)
-            .open(&finalized)
-            .unwrap()
-            .write_all(b"platform signature bytes")
-            .unwrap();
+        let mut finalized_file = OpenOptions::new().write(true).open(&finalized).unwrap();
+        finalized_file.seek(SeekFrom::Start(0)).unwrap();
+        finalized_file.write_all(b"R").unwrap();
 
         let output =
             package_update(&info, Some(&finalized), Some(&tmp.path().join("packages"))).unwrap();
