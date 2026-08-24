@@ -4,6 +4,12 @@ All notable changes to `conda-ship` are documented here.
 
 ## 0.9.0 - 2026-08-24
 
+> **Important:** 0.9.0 changes native macOS and Windows runtime compatibility.
+> Upgrade `cs` and `cs-template` together, then rebuild and re-sign affected
+> runtimes. A Windows runtime built with 0.8.0 or earlier cannot self-update
+> directly to this format. Follow the migration steps below for its first
+> replacement. Linux template compatibility is unchanged.
+
 ### Changed
 
 - Changed the native runtime-data layout so platform signatures select an
