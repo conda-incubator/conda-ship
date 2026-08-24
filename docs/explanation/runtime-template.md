@@ -55,6 +55,18 @@ When running from a source checkout, `cs build` still expects either an
 installed template next to `cs`, a `CONDA_SHIP_TEMPLATE` environment variable,
 or an explicit `--template PATH`.
 
+## Keep Native Builders And Templates Paired
+
+macOS and Windows builders require the signed-layout reader declaration emitted
+by the matching `cs-template` release. conda-ship 0.9.0 rejects native templates
+from 0.8.0 and earlier. Upgrade `cs` and `cs-template` together instead of
+mixing release assets. Linux templates do not use this native declaration.
+
+For the GitHub Action, update the pinned full action commit SHA and the
+`conda-ship-version` input together. For custom packaging, download the builder
+and template from the same release and verify both against that release's
+attestations or `SHA256SUMS`.
+
 ## What Users See
 
 The finished runtime does not expose conda-ship commands. On first invocation it

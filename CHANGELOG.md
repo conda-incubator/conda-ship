@@ -2,7 +2,31 @@
 
 All notable changes to `conda-ship` are documented here.
 
-## Unreleased
+## 0.9.0 - 2026-08-24
+
+> **Important:** 0.9.0 changes native macOS and Windows runtime compatibility.
+> Upgrade `cs` and `cs-template` together, then rebuild and re-sign affected
+> runtimes. A Windows runtime built with 0.8.0 or earlier cannot self-update
+> directly to this format. Follow the migration steps below for its first
+> replacement. Linux template compatibility is unchanged.
+
+### Changed
+
+- Changed the native runtime-data layout so platform signatures select an
+  authenticated footer. Mach-O runtime data now ends before
+  `LC_CODE_SIGNATURE`, while PE stores the footer in a read-only `.cship`
+  section that authenticates the appended JSON header and optional bundle.
+- Required macOS and Windows templates to declare the exact signed-layout
+  reader ABI in a linker-created image section. Builders reject missing,
+  malformed, duplicated, or unknown declarations. Linux templates are not
+  affected by this requirement.
+- Validated the native image kind, platform, and architecture against the
+  requested conda platform. Cross-target builds must pass the matching
+  `--platform` because `--target` does not infer it.
+- Snapshotted an embedded bundle after checksum verification so later pathname
+  replacement cannot change the bytes passed to decompression and extraction.
+  Embedded bootstrap now needs temporary storage for the compressed snapshot
+  in addition to the extracted packages.
 
 ### Fixed
 
@@ -16,19 +40,32 @@ All notable changes to `conda-ship` are documented here.
 - Made runtime stamping failure-atomic and bounded malformed Mach-O load-command
   allocation. Mach-O signatures larger than 16 MiB no longer hide a valid
   runtime stamp.
-- Required a versioned reader ABI declaration in dedicated Mach-O and PE image
-  sections. This rejects unmodified pre-fix templates whose embedded reader
-  could search mutable signature data. Builders and templates for those
-  platforms must now come from the same conda-ship release family.
 - Rejected mismatched template architectures and image kinds, non-executable or
   non-macOS images, overlapping or overwritten Mach-O link-edit data, malformed
-  PE section layouts, and PE32+ images beyond the loader size limit. Artifact
-  signing and hashing now finish in restricted staging before per-artifact
-  publication, with the checksum manifest published last. Changing a same-stem
-  artifact from `external` to another layout now retires the obsolete external
-  bundle.
-- Snapshotted an embedded bundle after checksum verification so later pathname
-  replacement cannot change the bytes passed to decompression and extraction.
+  PE section layouts, and PE32+ images beyond the loader size limit.
+- Performed native macOS ad hoc signing and all artifact hashing in restricted
+  staging before per-artifact publication, with the checksum manifest published
+  last. Changing a same-stem artifact from `external` to another layout now
+  retires the obsolete external bundle.
+
+### Migration
+
+- Upgrade `cs` and `cs-template` together. Templates from conda-ship 0.8.0 and
+  earlier cannot be used for native macOS or Windows builds. GitHub Action users
+  must update the full action commit SHA and `conda-ship-version` together.
+- Rebuild affected native runtimes with 0.9.0, apply the downstream platform
+  signature after stamping, preserve the conda-ship build record, and generate
+  new downstream final checksums, attestations, and executable update packages.
+  Re-signing an older stamped macOS runtime does not repair its invalid native
+  layout, and signing an older Windows overlay does not cover its runtime policy
+  bytes.
+- A Windows runtime built with 0.8.0 or earlier cannot apply a 0.9.0 executable
+  update package through its native updater. An adopting installer or package
+  manager must record external ownership during replacement, before the new
+  executable's first normal invocation. An installation that must remain
+  directly managed needs a fresh install that does not reuse its old
+  direct-install metadata. Later native updates can use 0.9.0-format update
+  packages.
 
 ## 0.8.0 - 2026-08-22
 

@@ -65,9 +65,10 @@ conda without depending on terminal formatting.
 `runtime template is incompatible with authenticated runtime data`
 : Mach-O and PE templates must contain the exact reader ABI declaration from
   the current format implementation in its dedicated image section. Use
-  `cs-template` from the same conda-ship release as the builder. Unmodified
-  pre-fix templates are rejected even when their executable layout could
-  otherwise be stamped. The declaration is not proof of template provenance.
+  `cs-template` from the same conda-ship release as the builder. conda-ship
+  0.9.0 rejects native templates from 0.8.0 and earlier even when their
+  executable layout could otherwise be stamped. The declaration is not proof
+  of template provenance.
 
 `universal Mach-O binaries are not supported`
 : Use a thin macOS template for the selected target. The builder also rejects
@@ -115,6 +116,15 @@ conda without depending on terminal formatting.
 : Finalize the PE so its Security Directory certificate range ends at the
   physical end of the executable. Do not append data after Authenticode
   signing.
+
+`signed PE runtime data has no authenticated anchor section`
+: Rebuild the Windows runtime with a matching conda-ship 0.9.0 builder and
+  template, then apply Authenticode signing to the new artifact. A legacy
+  signed PE overlay cannot be repaired by re-signing it. A Windows runtime from
+  0.8.0 or earlier also cannot consume a 0.9.0 executable update candidate, so
+  an adopting installer or package manager must record external ownership
+  during replacement. An installation that must remain directly managed needs
+  a fresh install that does not reuse its old direct-install metadata.
 
 `signed PE templates must be unsigned before runtime stamping`
 : Remove the existing Authenticode signature or rebuild an unsigned template.

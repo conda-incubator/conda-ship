@@ -29,7 +29,7 @@ If you prefer not to install `conda-pypi` into `base`, use
 Check that both commands are available:
 
 ```bash
-cs --version
+cs --help
 conda workspace --help
 ```
 

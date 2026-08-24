@@ -227,8 +227,11 @@ Downstream distributions decide:
   final artifacts
 
 conda-ship verifies the inputs it consumes and the package archives it stages or
-installs, but downstream release systems should sign and attest the final
-runtime artifacts after `cs build`.
+installs. Downstream release systems should first verify and, when required,
+attest the unchanged `cs build` output. They should then sign a copy of the
+runtime, verify its native signature, and publish a separate checksum or
+attestation for those finalized bytes. The original `.sha256` and `.info.json`
+continue to describe the pre-sign build output.
 
 ## Documentation
 
