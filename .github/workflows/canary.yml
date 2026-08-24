@@ -205,23 +205,13 @@ jobs:
           fi
           grep -q "runtime template, not a runnable conda runtime" template-error.txt
 
-      - name: Stamp native runtime structure
+      - name: Validate native builder and template pair
         shell: bash
         run: |
-          set -euo pipefail
-
-          target/release/cs.exe build \
-            --artifact-layout online \
-            --runtime-name arm64-canary \
-            --delegate-executable conda \
-            --platform win-arm64 \
+          python tests/ci/validate_runtime_pair.py native \
             --target "$TARGET" \
-            --target-label "$TARGET" \
-            --template target/release/cs-template.exe \
-            --root tests/fixtures/structural-runtime \
-            --out-dir "${RUNNER_TEMP}/arm64-canary"
-          cd "${RUNNER_TEMP}/arm64-canary"
-          sha256sum --check "arm64-canary-${TARGET}.sha256"
+            --platform win-arm64 \
+            --scratch-root "$RUNNER_TEMP"
 
   package-wheels:
     name: Package PyPI wheel (${{ matrix.target }})
@@ -301,46 +291,14 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
           TARGET: ${{ matrix.target }}
         run: |
-          set -euo pipefail
-
-          shopt -s nullglob
-          wheels=(dist-pypi/*.whl)
-          if [ "${#wheels[@]}" -ne 1 ]; then
-            echo "Expected one wheel, found ${#wheels[@]}." >&2
-            exit 1
-          fi
-          wheel_root="${RUNNER_TEMP}/conda-ship-wheel-${TARGET}"
-          ext=""
           python_cmd="python3"
           if [[ "$TARGET" == *"windows"* ]]; then
-            ext=".exe"
             python_cmd="python"
           fi
-          "$python_cmd" -m zipfile -e "${wheels[0]}" "$wheel_root"
-          cs="$(find "$wheel_root" -type f -path "*/scripts/cs${ext}" -print -quit)"
-          template="$(find "$wheel_root" -type f -path "*/scripts/cs-template${ext}" -print -quit)"
-          if [ -z "$cs" ] || [ -z "$template" ]; then
-            echo "Wheel does not contain both runtime scripts." >&2
-            exit 1
-          fi
-          chmod +x "$cs" "$template" || true
-          out_dir="${RUNNER_TEMP}/wheel-pair-${TARGET}"
-          "$cs" build \
-            --artifact-layout online \
-            --runtime-name wheel-pair \
-            --delegate-executable conda \
-            --platform "$PLATFORM" \
+          "$python_cmd" tests/ci/validate_runtime_pair.py wheel \
             --target "$TARGET" \
-            --target-label "$TARGET" \
-            --template "$template" \
-            --root tests/fixtures/structural-runtime \
-            --out-dir "$out_dir"
-          manifest="$out_dir/wheel-pair-${TARGET}.sha256"
-          if command -v sha256sum >/dev/null 2>&1; then
-            (cd "$out_dir" && sha256sum --check "$(basename "$manifest")")
-          else
-            (cd "$out_dir" && shasum --algorithm 256 --check "$(basename "$manifest")")
-          fi
+            --platform "$PLATFORM" \
+            --scratch-root "$RUNNER_TEMP"
 
   package-sdist:
     name: Package PyPI sdist

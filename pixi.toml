@@ -99,8 +99,8 @@ conda-ship = { path = ".", editable = true }
 
 [feature.test.tasks]
 pytest = "python -m pytest python/tests"
-ruff-check = "ruff check python pyproject.toml"
-ruff-format-check = "ruff format --check python pyproject.toml"
+ruff-check = "ruff check python tests/ci pyproject.toml"
+ruff-format-check = "ruff format --check python tests/ci pyproject.toml"
 
 [environments]
 docs = ["docs"]
