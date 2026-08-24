@@ -122,6 +122,44 @@ function Assert-SignedRuntimeExecutes {
   }
 }
 
+function Assert-AuthenticodeIntegrity {
+  param(
+    [string]$Path,
+    [string]$Thumbprint,
+    [string]$Label
+  )
+  $signature = Get-AuthenticodeSignature -LiteralPath $Path
+  Write-Host "$Label Authenticode status: $($signature.Status)"
+  if (
+    -not $signature.SignerCertificate -or
+    $signature.SignerCertificate.Thumbprint -ne $Thumbprint
+  ) {
+    throw "$Label does not have the expected Authenticode signer"
+  }
+  $untrustedRoot = (
+    $signature.Status -eq "UnknownError" -and
+    $signature.StatusMessage -match "root certificate.+not trusted"
+  )
+  if (
+    $signature.Status -notin @("Valid", "NotTrusted") -and
+    -not $untrustedRoot
+  ) {
+    throw "$Label does not have an intact Authenticode signature: $($signature.StatusMessage)"
+  }
+}
+
+function Assert-AuthenticodeHashMismatch {
+  param(
+    [string]$Path,
+    [string]$Label
+  )
+  $signature = Get-AuthenticodeSignature -LiteralPath $Path
+  Write-Host "$Label Authenticode status: $($signature.Status)"
+  if ($signature.Status -ne "HashMismatch") {
+    throw "$Label was not reported as an Authenticode hash mismatch"
+  }
+}
+
 if (-not (Test-Path -LiteralPath $RuntimePrefix -PathType Container)) {
   throw "Runtime prefix does not exist: $RuntimePrefix"
 }
@@ -142,26 +180,7 @@ $certificate = New-SelfSignedCertificate `
   -CertStoreLocation "Cert:\CurrentUser\My" `
   -HashAlgorithm SHA256 `
   -KeyExportPolicy Exportable
-$trustedCertificate = $null
 try {
-  Write-Host "Trusting code-signing certificate"
-  $trustedCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-    $certificate.RawData
-  )
-  $rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-    "Root",
-    [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
-  )
-  try {
-    $rootStore.Open(
-      [System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite
-    )
-    $rootStore.Add($trustedCertificate)
-  }
-  finally {
-    $rootStore.Close()
-  }
-
   foreach ($name in @("demo", "demoz")) {
     $source = Join-Path $DistDirectory "${name}-${Target}.exe"
     $signed = Join-Path $TemporaryDirectory "${name}-${Target}-signed.exe"
@@ -279,11 +298,11 @@ try {
     if ($LASTEXITCODE -ne 0) {
       throw "signtool failed to sign $signed"
     }
-    Write-Host "Verifying signed runtime: $signed"
-    & $signTool.FullName verify /pa /v $signed
-    if ($LASTEXITCODE -ne 0) {
-      throw "signtool failed to verify $signed"
-    }
+    Write-Host "Checking signed runtime integrity: $signed"
+    Assert-AuthenticodeIntegrity `
+      $signed `
+      $certificate.Thumbprint `
+      "Signed runtime"
     Write-Host "Executing signed runtime: $signed"
     Assert-SignedRuntimeExecutes $signed $RuntimePrefix
     Write-Host "Signed runtime execution completed: $signed"
@@ -312,10 +331,7 @@ try {
     Copy-Item $signed $anchorTampered
     Flip-FileByte $anchorTampered ($anchorOffset + 16)
     Write-Host "Verifying modified anchor rejection: $anchorTampered"
-    $null = & $signTool.FullName verify /pa $anchorTampered 2>&1
-    if ($LASTEXITCODE -eq 0) {
-      throw "Authenticode accepted a modified .cship anchor"
-    }
+    Assert-AuthenticodeHashMismatch $anchorTampered "Modified .cship anchor"
     Assert-RuntimeReadFailure `
       $anchorTampered `
       $attackInfo `
@@ -328,8 +344,8 @@ try {
     Copy-Item $signed $payloadTampered
     Flip-FileByte $payloadTampered $payloadStart
     Write-Host "Verifying modified payload behavior: $payloadTampered"
-    $null = & $signTool.FullName verify /pa $payloadTampered 2>&1
-    Write-Host "Overlay mutation SignTool status: $LASTEXITCODE"
+    $payloadSignature = Get-AuthenticodeSignature -LiteralPath $payloadTampered
+    Write-Host "Overlay mutation Authenticode status: $($payloadSignature.Status)"
     Assert-RuntimeReadFailure `
       $payloadTampered `
       $attackInfo `
@@ -360,8 +376,8 @@ try {
     )
     [System.IO.File]::WriteAllBytes($movedCertificate, $movedBytes)
     Write-Host "Verifying moved certificate rejection: $movedCertificate"
-    $null = & $signTool.FullName verify /pa $movedCertificate 2>&1
-    Write-Host "Moved certificate SignTool status: $LASTEXITCODE"
+    $movedSignature = Get-AuthenticodeSignature -LiteralPath $movedCertificate
+    Write-Host "Moved certificate Authenticode status: $($movedSignature.Status)"
     Assert-RuntimeReadFailure `
       $movedCertificate `
       $attackInfo `
@@ -453,10 +469,10 @@ try {
       [System.IO.File]::WriteAllBytes($shadow, $shadowBytes)
 
       Write-Host "Verifying certificate-padding fixture: $shadow"
-      & $signTool.FullName verify /pa /v $shadow
-      if ($LASTEXITCODE -ne 0) {
-        throw "signtool rejected the certificate-padding shadow fixture"
-      }
+      Assert-AuthenticodeIntegrity `
+        $shadow `
+        $certificate.Thumbprint `
+        "Certificate-padding fixture"
       Assert-RuntimeReadFailure `
         $shadow `
         $attackInfo `
@@ -466,11 +482,6 @@ try {
   }
 }
 finally {
-  if ($trustedCertificate) {
-    $trustedCertificate.Dispose()
-  }
   Remove-Item "Cert:\CurrentUser\My\$($certificate.Thumbprint)" `
-    -Force -ErrorAction SilentlyContinue
-  Remove-Item "Cert:\CurrentUser\Root\$($certificate.Thumbprint)" `
     -Force -ErrorAction SilentlyContinue
 }
