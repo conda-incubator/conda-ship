@@ -439,7 +439,11 @@ pub fn append_to_binary(
             "runtime template path was replaced while being stamped",
         ));
     }
-    let persisted = temporary.persist(binary).map_err(|error| error.error)?;
+    let (persisted, temporary_path) = temporary.keep().map_err(|error| error.error)?;
+    if let Err(error) = std::fs::rename(&temporary_path, binary) {
+        let _ = std::fs::remove_file(&temporary_path);
+        return Err(error);
+    }
     if !path_matches_open_file(binary, &persisted)? {
         return Err(invalid_data(
             "persisted runtime output was replaced during persistence",
@@ -467,6 +471,9 @@ struct BundleSource {
 
 impl BundleSource {
     fn open(path: &Path) -> io::Result<Self> {
+        if !std::fs::metadata(path)?.is_file() {
+            return Err(invalid_data("runtime data bundle is not a regular file"));
+        }
         let file = File::open(path)?;
         let metadata = file.metadata()?;
         if !metadata.is_file() {
@@ -3074,6 +3081,25 @@ mod tests {
     }
 
     #[test]
+    fn test_append_replaces_path_while_original_handle_remains_open() {
+        let mut binary = tempfile::NamedTempFile::new().unwrap();
+        let binary_path = binary.path().to_path_buf();
+        std::fs::write(&binary_path, b"binary").unwrap();
+        let header = RuntimeDataHeader::for_name("snek");
+
+        append_to_binary(&binary_path, &header, None).unwrap();
+
+        let mut original = Vec::new();
+        binary.as_file_mut().seek(SeekFrom::Start(0)).unwrap();
+        binary.as_file_mut().read_to_end(&mut original).unwrap();
+        assert_eq!(original, b"binary");
+        assert_eq!(
+            read_from_path(&binary_path).unwrap().unwrap().header,
+            header
+        );
+    }
+
+    #[test]
     fn test_macho_runtime_data_extends_linkedit_and_reuses_signature_slot() {
         let binary = macho_fixture(macho::CPU_TYPE_ARM64, true);
         let bundle = tempfile::NamedTempFile::new().unwrap();
@@ -4317,6 +4343,7 @@ mod tests {
         let error =
             append_to_binary(binary.path(), &header, Some(bundle_directory.path())).unwrap_err();
 
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
         assert!(error.to_string().contains("not a regular file"), "{error}");
         assert_eq!(std::fs::read(binary.path()).unwrap(), before);
     }
