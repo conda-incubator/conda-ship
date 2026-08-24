@@ -11,6 +11,10 @@ param(
   [ValidateNotNullOrEmpty()]
   [string]$DistDirectory = "dist",
 
+  [Parameter(Mandatory = $true)]
+  [ValidateNotNullOrEmpty()]
+  [string]$RuntimePrefix,
+
   [ValidateNotNullOrEmpty()]
   [string]$CsExecutable = ".\target\release\cs.exe"
 )
@@ -80,6 +84,34 @@ function Assert-RuntimeReadFailure {
   if ($status -eq 0 -or $output -notmatch [regex]::Escape($Expected)) {
     throw "$Label was not rejected as expected: $output"
   }
+}
+
+function Assert-SignedRuntimeExecutes {
+  param(
+    [string]$Binary,
+    [string]$Prefix
+  )
+  $hadConfiguredPrefix = Test-Path Env:CONDA_SHIP_PREFIX
+  $configuredPrefix = $env:CONDA_SHIP_PREFIX
+  try {
+    $env:CONDA_SHIP_PREFIX = $Prefix
+    $null = & $Binary --help
+    if ($LASTEXITCODE -ne 0) {
+      throw "The signed runtime did not execute"
+    }
+  }
+  finally {
+    if ($hadConfiguredPrefix) {
+      $env:CONDA_SHIP_PREFIX = $configuredPrefix
+    }
+    else {
+      Remove-Item Env:CONDA_SHIP_PREFIX -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+if (-not (Test-Path -LiteralPath $RuntimePrefix -PathType Container)) {
+  throw "Runtime prefix does not exist: $RuntimePrefix"
 }
 
 $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
@@ -234,10 +266,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
       throw "signtool failed to verify $signed"
     }
-    $null = & $signed --help
-    if ($LASTEXITCODE -ne 0) {
-      throw "The signed runtime did not execute"
-    }
+    Assert-SignedRuntimeExecutes $signed $RuntimePrefix
 
     $signedBytes = [System.IO.File]::ReadAllBytes($signed)
     $optionalOffset = $peOffset + 24
