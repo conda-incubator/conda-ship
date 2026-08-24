@@ -41,6 +41,17 @@ function Get-ByteRange {
   return ,$result
 }
 
+function Get-Sha256 {
+  param([byte[]]$Bytes)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try {
+    return ,$sha256.ComputeHash($Bytes)
+  }
+  finally {
+    $sha256.Dispose()
+  }
+}
+
 function Flip-FileByte {
   param(
     [string]$Path,
@@ -76,6 +87,7 @@ function Assert-RuntimeReadFailure {
     "runtime-read-$([guid]::NewGuid())"
   )
   New-Item -ItemType Directory -Path $packageDir | Out-Null
+  Write-Host "Checking runtime-data rejection: $Label"
   $output = & $CsExecutable package-update `
     --info $Info `
     --binary $Binary `
@@ -114,6 +126,7 @@ if (-not (Test-Path -LiteralPath $RuntimePrefix -PathType Container)) {
   throw "Runtime prefix does not exist: $RuntimePrefix"
 }
 
+Write-Host "Locating signtool"
 $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
   Sort-Object FullName -Descending |
   Select-Object -First 1
@@ -122,6 +135,7 @@ if (-not $signTool) {
 }
 
 $subject = "CN=conda-ship CI $([guid]::NewGuid())"
+Write-Host "Creating code-signing certificate"
 $certificate = New-SelfSignedCertificate `
   -Type CodeSigningCert `
   -Subject $subject `
@@ -130,6 +144,7 @@ $certificate = New-SelfSignedCertificate `
   -KeyExportPolicy Exportable
 $trustedCertificate = $null
 try {
+  Write-Host "Trusting code-signing certificate"
   $trustedCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
     $certificate.RawData
   )
@@ -150,6 +165,7 @@ try {
   foreach ($name in @("demo", "demoz")) {
     $source = Join-Path $DistDirectory "${name}-${Target}.exe"
     $signed = Join-Path $TemporaryDirectory "${name}-${Target}-signed.exe"
+    Write-Host "Inspecting runtime layout: $source"
     Copy-Item $source $signed
     $unsignedLength = (Get-Item $signed).Length
     if ($unsignedLength % 8 -ne 0) {
@@ -221,10 +237,10 @@ try {
 
     $headerBytes = Get-ByteRange $bytes $payloadStart $headerLength
     $expectedHeaderHash = Get-ByteRange $bytes ($anchorOffset + 16) 32
-    $actualHeaderHash = [Security.Cryptography.SHA256]::HashData($headerBytes)
+    $actualHeaderHash = Get-Sha256 $headerBytes
     if (
-      [Convert]::ToHexString($actualHeaderHash) -ne
-      [Convert]::ToHexString($expectedHeaderHash)
+      [Convert]::ToBase64String($actualHeaderHash) -ne
+      [Convert]::ToBase64String($expectedHeaderHash)
     ) {
       throw "The PE runtime header does not match the signed anchor"
     }
@@ -233,10 +249,10 @@ try {
       ($payloadStart + $headerLength) `
       $bundleLength
     $expectedBundleHash = Get-ByteRange $bytes ($anchorOffset + 48) 32
-    $actualBundleHash = [Security.Cryptography.SHA256]::HashData($bundleBytes)
+    $actualBundleHash = Get-Sha256 $bundleBytes
     if (
-      [Convert]::ToHexString($actualBundleHash) -ne
-      [Convert]::ToHexString($expectedBundleHash)
+      [Convert]::ToBase64String($actualBundleHash) -ne
+      [Convert]::ToBase64String($expectedBundleHash)
     ) {
       throw "The PE runtime bundle does not match the signed anchor"
     }
@@ -258,15 +274,19 @@ try {
       [Text.UTF8Encoding]::new($false)
     )
 
+    Write-Host "Signing runtime: $signed"
     & $signTool.FullName sign /fd SHA256 /sha1 $certificate.Thumbprint $signed
     if ($LASTEXITCODE -ne 0) {
       throw "signtool failed to sign $signed"
     }
+    Write-Host "Verifying signed runtime: $signed"
     & $signTool.FullName verify /pa /v $signed
     if ($LASTEXITCODE -ne 0) {
       throw "signtool failed to verify $signed"
     }
+    Write-Host "Executing signed runtime: $signed"
     Assert-SignedRuntimeExecutes $signed $RuntimePrefix
+    Write-Host "Signed runtime execution completed: $signed"
 
     $signedBytes = [System.IO.File]::ReadAllBytes($signed)
     $optionalOffset = $peOffset + 24
@@ -291,6 +311,7 @@ try {
     )
     Copy-Item $signed $anchorTampered
     Flip-FileByte $anchorTampered ($anchorOffset + 16)
+    Write-Host "Verifying modified anchor rejection: $anchorTampered"
     $null = & $signTool.FullName verify /pa $anchorTampered 2>&1
     if ($LASTEXITCODE -eq 0) {
       throw "Authenticode accepted a modified .cship anchor"
@@ -306,6 +327,7 @@ try {
     )
     Copy-Item $signed $payloadTampered
     Flip-FileByte $payloadTampered $payloadStart
+    Write-Host "Verifying modified payload behavior: $payloadTampered"
     $null = & $signTool.FullName verify /pa $payloadTampered 2>&1
     Write-Host "Overlay mutation SignTool status: $LASTEXITCODE"
     Assert-RuntimeReadFailure `
@@ -337,6 +359,7 @@ try {
       $securityOffset
     )
     [System.IO.File]::WriteAllBytes($movedCertificate, $movedBytes)
+    Write-Host "Verifying moved certificate rejection: $movedCertificate"
     $null = & $signTool.FullName verify /pa $movedCertificate 2>&1
     Write-Host "Moved certificate SignTool status: $LASTEXITCODE"
     Assert-RuntimeReadFailure `
@@ -371,12 +394,12 @@ try {
       $cursor += 8
       [BitConverter]::GetBytes([uint64]0).CopyTo($forged, $cursor)
       $cursor += 8
-      [Security.Cryptography.SHA256]::HashData($forgedHeaderBytes).CopyTo(
+      (Get-Sha256 $forgedHeaderBytes).CopyTo(
         $forged,
         $cursor
       )
       $cursor += 32
-      [Security.Cryptography.SHA256]::HashData([byte[]]::new(0)).CopyTo(
+      (Get-Sha256 ([byte[]]::new(0))).CopyTo(
         $forged,
         $cursor
       )
@@ -429,6 +452,7 @@ try {
       )
       [System.IO.File]::WriteAllBytes($shadow, $shadowBytes)
 
+      Write-Host "Verifying certificate-padding fixture: $shadow"
       & $signTool.FullName verify /pa /v $shadow
       if ($LASTEXITCODE -ne 0) {
         throw "signtool rejected the certificate-padding shadow fixture"

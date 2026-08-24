@@ -189,7 +189,7 @@ jobs:
       - name: Verify Windows runtime signature coverage
         if: contains(matrix.target, 'windows-msvc')
         timeout-minutes: 10
-        shell: pwsh
+        shell: powershell
         run: |
           ./tests/ci/verify_windows_runtime_signatures.ps1 `
             -Target $env:TARGET `
