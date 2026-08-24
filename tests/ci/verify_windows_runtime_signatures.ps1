@@ -399,7 +399,10 @@ try {
       }
       $headerJson = [Text.Encoding]::UTF8.GetString($headerBytes)
       $forgedHeaderObject = $headerJson | ConvertFrom-Json
-      $forgedHeaderObject.update = $attackUpdate
+      $forgedHeaderObject | Add-Member `
+        -NotePropertyName update `
+        -NotePropertyValue $attackUpdate `
+        -Force
       $forgedHeaderBytes = [Text.Encoding]::UTF8.GetBytes(
         ($forgedHeaderObject | ConvertTo-Json -Compress -Depth 20)
       )
