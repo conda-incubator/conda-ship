@@ -113,7 +113,7 @@ runner's operating system and architecture:
 | `macOS` | `X64` | `x86_64-apple-darwin` | End-to-end runtime bootstrap covered. |
 | `macOS` | `ARM64` | `aarch64-apple-darwin` | End-to-end runtime bootstrap covered. |
 | `Windows` | `X64` | `x86_64-pc-windows-msvc` | End-to-end runtime bootstrap covered. |
-| `Windows` | `ARM64` | `aarch64-pc-windows-msvc` | Builder assets, template assets, PyPI wheels, and action target mapping only. Full runtime bootstrap is not end-to-end supported yet. |
+| `Windows` | `ARM64` | `aarch64-pc-windows-msvc` | Builder assets, template assets, PyPI wheels, action target mapping, and native structural runtime stamping are covered. Full runtime bootstrap is not end-to-end supported yet. |
 
 Use GitHub-hosted or self-hosted runners that report one of those
 `runner.os`/`runner.arch` combinations. Release workflows should pin the action

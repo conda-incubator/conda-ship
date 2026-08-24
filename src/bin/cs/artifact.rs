@@ -1,8 +1,10 @@
 use std::env;
 use std::ffi::OsString;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
+use fs4::FileExt;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::Platform;
 use rattler_lock::{CondaPackageData, LockFile};
@@ -776,17 +778,27 @@ pub(crate) fn stage_artifacts(
         .with_context(|| format!("failed to create {}", out_dir.display()))?;
 
     let paths = planned_artifact_paths(&out_dir, artifact_name, layout, target_label, target);
-    std::fs::copy(source_binary, &paths.binary)
+    let staging = create_artifact_staging_dir(&out_dir)
+        .into_diagnostic()
+        .with_context(|| {
+            format!(
+                "failed to create staging directory in {}",
+                out_dir.display()
+            )
+        })?;
+    let staged_paths =
+        planned_artifact_paths(staging.path(), artifact_name, layout, target_label, target);
+    std::fs::copy(source_binary, &staged_paths.binary)
         .into_diagnostic()
         .with_context(|| {
             format!(
                 "failed to copy {} to {}",
                 source_binary.display(),
-                paths.binary.display()
+                staged_paths.binary.display()
             )
         })?;
     stamp_runtime_data(
-        &paths.binary,
+        &staged_paths.binary,
         layout,
         platform,
         runtime,
@@ -794,11 +806,12 @@ pub(crate) fn stage_artifacts(
         derived,
         generated_bundle,
     )?;
+    ad_hoc_sign_macos(&staged_paths.binary, platform)?;
 
-    let bundle = if layout == BundleLayout::External {
+    let staged_bundle = if layout == BundleLayout::External {
         let source_bundle = generated_bundle
             .ok_or_else(|| miette::miette!("external builds require a generated bundle"))?;
-        let staged_bundle = paths
+        let staged_bundle = staged_paths
             .bundle
             .as_ref()
             .ok_or_else(|| miette::miette!("external builds have a planned bundle path"))?;
@@ -818,34 +831,218 @@ pub(crate) fn stage_artifacts(
 
     let metadata = write_artifact_metadata(
         root,
-        &out_dir,
-        &paths.stem,
+        staging.path(),
+        &staged_paths.stem,
         runtime,
         artifact_name,
         layout,
         platform,
-        &paths.binary,
-        bundle.as_deref(),
+        &staged_paths.binary,
+        staged_bundle.as_deref(),
         derived,
     )?;
+
+    publish_staged_artifact_set(
+        &out_dir,
+        staging.path(),
+        &staged_paths,
+        staged_bundle.as_deref(),
+        &metadata,
+        &paths,
+    )?;
+
+    let bundle = paths.bundle.clone();
 
     eprintln!("staged {}", paths.binary.display());
     if let Some(bundle) = &bundle {
         eprintln!("staged {}", bundle.display());
     }
-    eprintln!("wrote {}", metadata.sbom.display());
-    eprintln!("wrote {}", metadata.info.display());
-    eprintln!("wrote {}", metadata.checksums.display());
+    eprintln!("wrote {}", paths.sbom.display());
+    eprintln!("wrote {}", paths.info.display());
+    eprintln!("wrote {}", paths.checksums.display());
 
     Ok(BuildOutput {
         binary: paths.binary,
         bundle,
-        info: metadata.info,
-        checksums: metadata.checksums,
-        lock: metadata.lock,
-        package_list: metadata.package_list,
-        sbom: metadata.sbom,
+        info: paths.info,
+        checksums: paths.checksums,
+        lock: paths.lock,
+        package_list: paths.package_list,
+        sbom: paths.sbom,
     })
+}
+
+fn create_artifact_staging_dir(out_dir: &Path) -> io::Result<tempfile::TempDir> {
+    let mut builder = tempfile::Builder::new();
+    builder.prefix(".conda-ship-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o700));
+    }
+    builder.tempdir_in(out_dir)
+}
+
+struct ArtifactPublicationLock {
+    _file: File,
+}
+
+impl ArtifactPublicationLock {
+    fn acquire(out_dir: &Path, stem: &str) -> miette::Result<Self> {
+        let path = out_dir.join(format!(".{stem}.conda-ship.publish.lock"));
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .into_diagnostic()
+            .with_context(|| format!("failed to open publication lock at {}", path.display()))?;
+        FileExt::lock(&file)
+            .into_diagnostic()
+            .with_context(|| format!("failed to acquire publication lock at {}", path.display()))?;
+        Ok(Self { _file: file })
+    }
+}
+
+fn publish_staged_artifact_set(
+    out_dir: &Path,
+    staging_dir: &Path,
+    staged_paths: &PlannedArtifactPaths,
+    staged_bundle: Option<&Path>,
+    metadata: &ArtifactMetadataPaths,
+    paths: &PlannedArtifactPaths,
+) -> miette::Result<()> {
+    let _publication_lock = ArtifactPublicationLock::acquire(out_dir, &paths.stem)?;
+    retire_completion_marker(&paths.checksums, staging_dir)?;
+    if paths.bundle.is_none() {
+        retire_obsolete_bundle(&bundle_path(out_dir, &paths.stem), staging_dir)?;
+    }
+
+    if let (Some(staged), Some(published)) = (staged_bundle, paths.bundle.as_deref()) {
+        publish_staged_file(staged, published)?;
+    }
+    publish_staged_file(&metadata.lock, &paths.lock)?;
+    publish_staged_file(&metadata.package_list, &paths.package_list)?;
+    publish_staged_file(&metadata.sbom, &paths.sbom)?;
+    publish_staged_file(&staged_paths.binary, &paths.binary)?;
+    publish_staged_file(&metadata.info, &paths.info)?;
+    publish_staged_file(&metadata.checksums, &paths.checksums)
+}
+
+fn retire_obsolete_bundle(bundle: &Path, staging_dir: &Path) -> miette::Result<()> {
+    let retired = staging_dir.join(".previous-bundle");
+    match std::fs::symlink_metadata(bundle) {
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(miette::miette!(
+                "obsolete external bundle is not a regular file: {}",
+                bundle.display()
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).into_diagnostic().with_context(|| {
+                format!(
+                    "failed to inspect the obsolete external bundle at {}",
+                    bundle.display()
+                )
+            });
+        }
+    }
+    match std::fs::rename(bundle, &retired) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).into_diagnostic().with_context(|| {
+            format!(
+                "failed to retire the obsolete external bundle at {}",
+                bundle.display()
+            )
+        }),
+    }
+}
+
+fn retire_completion_marker(checksums: &Path, staging_dir: &Path) -> miette::Result<()> {
+    let retired = staging_dir.join(".previous-sha256");
+    match std::fs::symlink_metadata(checksums) {
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(miette::miette!(
+                "completion marker is not a regular file: {}",
+                checksums.display()
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).into_diagnostic().with_context(|| {
+                format!(
+                    "failed to inspect the previous completion marker at {}",
+                    checksums.display()
+                )
+            });
+        }
+    }
+    match std::fs::rename(checksums, &retired) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).into_diagnostic().with_context(|| {
+            format!(
+                "failed to retire the previous completion marker at {}",
+                checksums.display()
+            )
+        }),
+    }
+}
+
+fn ad_hoc_sign_macos(binary: &Path, platform: Platform) -> miette::Result<()> {
+    #[cfg(target_os = "macos")]
+    if platform.is_osx() {
+        let status = std::process::Command::new("/usr/bin/codesign")
+            .args(["--force", "--sign", "-"])
+            .arg(binary)
+            .status()
+            .into_diagnostic()
+            .with_context(|| format!("failed to run codesign for {}", binary.display()))?;
+        if !status.success() {
+            return Err(miette::miette!(
+                "codesign failed for {} with status {status}",
+                binary.display()
+            ));
+        }
+        let status = std::process::Command::new("/usr/bin/codesign")
+            .args(["--verify", "--strict"])
+            .arg(binary)
+            .status()
+            .into_diagnostic()
+            .with_context(|| format!("failed to verify codesign for {}", binary.display()))?;
+        if !status.success() {
+            return Err(miette::miette!(
+                "codesign verification failed for {} with status {status}",
+                binary.display()
+            ));
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = (binary, platform);
+
+    Ok(())
+}
+
+fn publish_staged_file(staged: &Path, published: &Path) -> miette::Result<()> {
+    tempfile::TempPath::try_from_path(staged.to_path_buf())
+        .into_diagnostic()
+        .with_context(|| format!("failed to prepare {} for publication", staged.display()))?
+        .persist(published)
+        .map_err(|error| error.error)
+        .into_diagnostic()
+        .with_context(|| {
+            format!(
+                "failed to publish {} as {}",
+                staged.display(),
+                published.display()
+            )
+        })
 }
 
 fn planned_artifact_paths(
@@ -857,8 +1054,7 @@ fn planned_artifact_paths(
 ) -> PlannedArtifactPaths {
     let stem = artifact_stem(name, target_label);
     let binary = out_dir.join(binary_filename(&stem, target));
-    let bundle =
-        (layout == BundleLayout::External).then(|| out_dir.join(format!("{stem}.bundle.tar.zst")));
+    let bundle = (layout == BundleLayout::External).then(|| bundle_path(out_dir, &stem));
     PlannedArtifactPaths {
         info: out_dir.join(format!("{stem}.info.json")),
         checksums: out_dir.join(format!("{stem}.sha256")),
@@ -869,6 +1065,10 @@ fn planned_artifact_paths(
         binary,
         bundle,
     }
+}
+
+fn bundle_path(out_dir: &Path, stem: &str) -> PathBuf {
+    out_dir.join(format!("{stem}.bundle.tar.zst"))
 }
 
 #[derive(Debug)]
@@ -1464,7 +1664,24 @@ fn resolve_runtime_template(path: &Path) -> miette::Result<PathBuf> {
             ),
         ));
     }
+    ensure_runtime_template_reader(&template)?;
     Ok(template)
+}
+
+fn ensure_runtime_template_reader(template: &Path) -> miette::Result<()> {
+    runtime_data::validate_runtime_template_reader(template).map_err(|error| {
+        ship_error(
+            DiagnosticKind::RuntimeTemplateIncompatible,
+            format!(
+                "runtime template is incompatible with authenticated runtime data: {}: {error}",
+                template.display()
+            ),
+            Some(
+                "Use the cs-template binary from the same conda-ship release as the builder."
+                    .to_string(),
+            ),
+        )
+    })
 }
 
 fn stamp_runtime_data(
@@ -1476,6 +1693,7 @@ fn stamp_runtime_data(
     derived: &DerivedRuntimeLock,
     generated_bundle: Option<&Path>,
 ) -> miette::Result<()> {
+    ensure_runtime_template_reader(binary)?;
     let delegate_executable = derived
         .runtime_config
         .delegate_executable
@@ -1661,4 +1879,151 @@ fn file_name(path: &Path) -> miette::Result<String> {
         .ok_or_else(|| miette::miette!("path has no file name: {}", path.display()))?
         .to_string_lossy()
         .to_string())
+}
+
+#[cfg(test)]
+mod publication_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn artifact_staging_directory_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let out_dir = tempfile::tempdir().unwrap();
+        let staging = create_artifact_staging_dir(out_dir.path()).unwrap();
+        let mode = staging.path().metadata().unwrap().permissions().mode() & 0o777;
+
+        assert_eq!(mode, 0o700);
+    }
+
+    #[test]
+    fn publication_lock_serializes_the_same_artifact_stem() {
+        let out_dir = tempfile::tempdir().unwrap();
+        let first = ArtifactPublicationLock::acquire(out_dir.path(), "demo").unwrap();
+        let lock_path = out_dir.path().join(".demo.conda-ship.publish.lock");
+        let second = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(lock_path)
+            .unwrap();
+
+        assert!(matches!(
+            FileExt::try_lock(&second),
+            Err(fs4::TryLockError::WouldBlock)
+        ));
+        drop(first);
+        FileExt::try_lock(&second).unwrap();
+    }
+
+    #[test]
+    fn failed_publication_does_not_leave_old_completion_marker() {
+        let out_dir = tempfile::tempdir().unwrap();
+        let staging = create_artifact_staging_dir(out_dir.path()).unwrap();
+        let staged_paths =
+            planned_artifact_paths(staging.path(), "demo", BundleLayout::Online, None, None);
+        let paths =
+            planned_artifact_paths(out_dir.path(), "demo", BundleLayout::Online, None, None);
+        let metadata = ArtifactMetadataPaths {
+            info: staged_paths.info.clone(),
+            checksums: staged_paths.checksums.clone(),
+            lock: staged_paths.lock.clone(),
+            package_list: staged_paths.package_list.clone(),
+            sbom: staged_paths.sbom.clone(),
+        };
+        for (path, contents) in [
+            (&staged_paths.binary, "new binary"),
+            (&metadata.lock, "new lock"),
+            (&metadata.package_list, "new packages"),
+            (&metadata.sbom, "new sbom"),
+            (&metadata.info, "new info"),
+            (&metadata.checksums, "new checksums"),
+            (&paths.binary, "old binary"),
+            (&paths.lock, "old lock"),
+            (&paths.package_list, "old packages"),
+            (&paths.sbom, "old sbom"),
+            (&paths.checksums, "old checksums"),
+        ] {
+            std::fs::write(path, contents).unwrap();
+        }
+        std::fs::create_dir(&paths.info).unwrap();
+
+        let error = publish_staged_artifact_set(
+            out_dir.path(),
+            staging.path(),
+            &staged_paths,
+            None,
+            &metadata,
+            &paths,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("failed to publish"), "{error}");
+        assert_eq!(
+            std::fs::read_to_string(&paths.binary).unwrap(),
+            "new binary"
+        );
+        assert!(!paths.checksums.exists());
+    }
+
+    #[test]
+    fn publication_does_not_retire_a_directory_as_completion_marker() {
+        let out_dir = tempfile::tempdir().unwrap();
+        let staging = create_artifact_staging_dir(out_dir.path()).unwrap();
+        let checksums = out_dir.path().join("demo.sha256");
+        std::fs::create_dir(&checksums).unwrap();
+        let retained = checksums.join("retained.txt");
+        std::fs::write(&retained, "retained").unwrap();
+
+        let error = retire_completion_marker(&checksums, staging.path()).unwrap_err();
+
+        assert!(error.to_string().contains("not a regular file"), "{error}");
+        assert_eq!(std::fs::read_to_string(retained).unwrap(), "retained");
+    }
+
+    #[test]
+    fn publishing_nonexternal_layout_retires_previous_external_bundle() {
+        let out_dir = tempfile::tempdir().unwrap();
+        let staging = create_artifact_staging_dir(out_dir.path()).unwrap();
+        let staged_paths =
+            planned_artifact_paths(staging.path(), "demo", BundleLayout::Online, None, None);
+        let paths =
+            planned_artifact_paths(out_dir.path(), "demo", BundleLayout::Online, None, None);
+        let metadata = ArtifactMetadataPaths {
+            info: staged_paths.info.clone(),
+            checksums: staged_paths.checksums.clone(),
+            lock: staged_paths.lock.clone(),
+            package_list: staged_paths.package_list.clone(),
+            sbom: staged_paths.sbom.clone(),
+        };
+        for (path, contents) in [
+            (&staged_paths.binary, "new binary"),
+            (&metadata.lock, "new lock"),
+            (&metadata.package_list, "new packages"),
+            (&metadata.sbom, "new sbom"),
+            (&metadata.info, "new info"),
+            (&metadata.checksums, "new checksums"),
+            (&paths.checksums, "old checksums"),
+        ] {
+            std::fs::write(path, contents).unwrap();
+        }
+        let obsolete_bundle = bundle_path(out_dir.path(), "demo");
+        std::fs::write(&obsolete_bundle, "old bundle").unwrap();
+
+        publish_staged_artifact_set(
+            out_dir.path(),
+            staging.path(),
+            &staged_paths,
+            None,
+            &metadata,
+            &paths,
+        )
+        .unwrap();
+
+        assert!(!obsolete_bundle.exists());
+        assert_eq!(
+            std::fs::read_to_string(&paths.checksums).unwrap(),
+            "new checksums"
+        );
+    }
 }

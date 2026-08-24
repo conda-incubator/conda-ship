@@ -1,0 +1,31 @@
+---
+version: 6
+environments:
+  default:
+    channels: []
+    packages:
+      linux-64:
+        - conda: https://conda.anaconda.org/conda-forge/linux-64/structural-placeholder-0-0.conda
+      linux-aarch64:
+        - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/structural-placeholder-0-0.conda
+      osx-64:
+        - conda: https://conda.anaconda.org/conda-forge/osx-64/structural-placeholder-0-0.conda
+      osx-arm64:
+        - conda: https://conda.anaconda.org/conda-forge/osx-arm64/structural-placeholder-0-0.conda
+      win-64:
+        - conda: https://conda.anaconda.org/conda-forge/win-64/structural-placeholder-0-0.conda
+      win-arm64:
+        - conda: https://conda.anaconda.org/conda-forge/win-arm64/structural-placeholder-0-0.conda
+packages:
+  - conda: https://conda.anaconda.org/conda-forge/linux-64/structural-placeholder-0-0.conda
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/structural-placeholder-0-0.conda
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  - conda: https://conda.anaconda.org/conda-forge/osx-64/structural-placeholder-0-0.conda
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/structural-placeholder-0-0.conda
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  - conda: https://conda.anaconda.org/conda-forge/win-64/structural-placeholder-0-0.conda
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  - conda: https://conda.anaconda.org/conda-forge/win-arm64/structural-placeholder-0-0.conda
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"

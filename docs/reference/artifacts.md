@@ -95,7 +95,9 @@ stem uses that explicit name for any layout, for example `demo-cli.info.json`
 or `demo-cli-linux-64.info.json`.
 
 For an `external` build, conda-ship also stages `demo.bundle.tar.zst` or a
-target-qualified equivalent.
+target-qualified equivalent. Rebuilding the same artifact stem as `online` or
+`embedded` retires any previous external bundle before publishing the new
+checksum manifest.
 
 These files describe the staged release output. During automatic first-run
 bootstrap, the generated runtime also writes managed-prefix metadata such as
@@ -173,15 +175,17 @@ changes.
 
 ## Stamped Runtime Data
 
-conda-ship appends a runtime data block to every staged runtime. The block
-contains the runtime lock, runtime and artifact identity, version, platform,
-delegate executable, install scheme, install name, docs URL, installer,
-optional executable update configuration, bundle and offline environment
-variable names, and the embedded bundle bytes for `embedded` builds. The
-universal `CONDA_SHIP_PREFIX` override is runtime behavior rather than a
-stamped variable name.
+conda-ship stamps runtime data into every staged runtime. On macOS, it extends
+the Mach-O `__LINKEDIT` segment over an appended block before native signing.
+On Windows, it writes the footer into a read-only `.cship` PE section and
+appends the JSON header and optional bundle. The data contains the runtime lock,
+runtime and artifact identity, version, platform, delegate executable, install
+scheme, install name, docs URL, installer, optional executable update
+configuration, bundle and offline environment variable names, and the embedded
+bundle bytes for `embedded` builds. The universal `CONDA_SHIP_PREFIX` override
+is runtime behavior rather than a stamped variable name.
 
-The data block ends with:
+The format-specific footer records:
 
 - format version
 - header length
@@ -190,18 +194,21 @@ The data block ends with:
 - bundle SHA256, or the SHA256 of empty bytes when no embedded bundle is present
 - conda-ship runtime-data magic bytes
 
-The generated runtime validates the stamped header at startup. For
-embedded artifacts, it also verifies the bundle checksum before extracting package
-archives during automatic bootstrap.
+The generated runtime validates the stamped header at startup. For embedded
+artifacts, it copies the embedded bundle to a temporary snapshot while checking
+its checksum, then extracts package archives only from that verified snapshot.
 
 The binary checksum in `.sha256` covers the final stamped artifact. The
 conda-ship release workflow also publishes GitHub Artifact Attestations for
 the `cs` CLI, runtime templates, and `SHA256SUMS` manifest.
 
 If signing or another downstream step changes the staged executable, the
-original `.sha256` continues to describe the `cs build` output. Pass the
-finalized file to `cs package-update --binary`. The command snapshots those
-bytes and reports the finalized payload digest in its JSON output.
+original `.sha256` and the executable checksum inside `.info.json` continue to
+describe the `cs build` output. Attest the finalized executable separately or
+generate a downstream final manifest. Pass the finalized file to
+`cs package-update --binary` when building an executable update package. The
+command snapshots those bytes and reports the finalized payload digest in its
+JSON output, but does not rewrite the original metadata files.
 
 Verify a downloaded release asset with:
 

@@ -1,0 +1,8 @@
+# CI-only project for validating native builder and template structure without
+# downloading or executing its placeholder package.
+[tool.conda-ship]
+source-environment = "default"
+runtime-name = "structural-runtime"
+runtime-version = "0"
+delegate-executable = "conda"
+artifact-layout = "online"

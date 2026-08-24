@@ -130,12 +130,15 @@ Pass a target triple, an artifact label, and a matching prebuilt template:
 ```bash
 cs build \
   --runtime-name demo \
+  --platform linux-64 \
   --target x86_64-unknown-linux-gnu \
   --target-label x86_64-unknown-linux-gnu \
   --template ./cs-template-x86_64-unknown-linux-gnu
 ```
 
 The target label is appended to staged artifact names and metadata files.
+`--target` selects the template architecture and does not infer `--platform`,
+which selects the conda packages for the runtime.
 
 ## Keep Names Distribution-Specific
 

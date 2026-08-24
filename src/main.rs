@@ -21,7 +21,15 @@ mod tls;
 
 use commands::ensure_bootstrapped;
 
+#[used]
+#[cfg_attr(target_os = "macos", unsafe(link_section = "__TEXT,__cship_reader"))]
+#[cfg_attr(target_os = "windows", unsafe(link_section = ".cscap"))]
+static READER_CAPABILITY_RECORD: runtime_data::ReaderCapabilityRecord =
+    runtime_data::reader_capability_record();
+
 fn main() -> miette::Result<()> {
+    // Keep the template-only ABI declaration reachable as well as linker-retained.
+    std::hint::black_box(&READER_CAPABILITY_RECORD);
     tls::install_default_provider();
 
     let num_cores = std::thread::available_parallelism()

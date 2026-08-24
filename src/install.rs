@@ -317,11 +317,11 @@ pub fn extract_embedded_bundle() -> miette::Result<Option<PathBuf>> {
         .into_diagnostic()
         .context("failed to create temp dir for embedded bundle")?;
 
-    bundle
-        .verify()
+    let verified_bundle = bundle
+        .open_verified()
         .into_diagnostic()
         .context("failed to verify embedded bundle")?;
-    let decoder = zstd::Decoder::new(bundle.open().into_diagnostic()?)
+    let decoder = zstd::Decoder::new(verified_bundle)
         .into_diagnostic()
         .context("failed to decompress embedded bundle")?;
     let mut archive = tar::Archive::new(decoder);

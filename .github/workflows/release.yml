@@ -94,16 +94,22 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            platform: linux-64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
+            platform: linux-aarch64
           - target: x86_64-apple-darwin
             os: macos-15-intel
+            platform: osx-64
           - target: aarch64-apple-darwin
             os: macos-15
+            platform: osx-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            platform: win-64
           - target: aarch64-pc-windows-msvc
             os: windows-11-arm
+            platform: win-arm64
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -140,6 +146,35 @@ jobs:
 
       - name: Build runtime template
         run: pixi run -- cargo rustc --locked --release --bin cs-template --features runtime-template -- -D warnings
+
+      - name: Validate native builder and template pair
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+
+          ext=""
+          if [[ "$TARGET" == *"windows"* ]]; then
+            ext=".exe"
+          fi
+          out_dir="${RUNNER_TEMP}/release-pair-${TARGET}"
+          "target/release/cs${ext}" build \
+            --artifact-layout online \
+            --runtime-name release-pair \
+            --delegate-executable conda \
+            --platform "$PLATFORM" \
+            --target "$TARGET" \
+            --target-label "$TARGET" \
+            --template "target/release/cs-template${ext}" \
+            --root tests/fixtures/structural-runtime \
+            --out-dir "$out_dir"
+          manifest="$out_dir/release-pair-${TARGET}.sha256"
+          if command -v sha256sum >/dev/null 2>&1; then
+            (cd "$out_dir" && sha256sum --check "$(basename "$manifest")")
+          else
+            (cd "$out_dir" && shasum --algorithm 256 --check "$(basename "$manifest")")
+          fi
 
       - name: Stage release assets
         shell: bash
@@ -268,17 +303,23 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             manylinux: "2_17"
+            platform: linux-64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
             manylinux: "2_17"
+            platform: linux-aarch64
           - target: x86_64-apple-darwin
             os: macos-15-intel
+            platform: osx-64
           - target: aarch64-apple-darwin
             os: macos-15
+            platform: osx-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            platform: win-64
           - target: aarch64-pc-windows-msvc
             os: windows-11-arm
+            platform: win-arm64
 
     steps:
       - name: Verify runner target
@@ -319,6 +360,53 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
           args: --release --locked -o dist-pypi
+
+      - name: Validate packaged builder and template pair
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          wheels=(dist-pypi/*.whl)
+          if [ "${#wheels[@]}" -ne 1 ]; then
+            echo "Expected one wheel, found ${#wheels[@]}." >&2
+            exit 1
+          fi
+          wheel_root="${RUNNER_TEMP}/conda-ship-wheel-${TARGET}"
+          ext=""
+          python_cmd="python3"
+          if [[ "$TARGET" == *"windows"* ]]; then
+            ext=".exe"
+            python_cmd="python"
+          fi
+          "$python_cmd" -m zipfile -e "${wheels[0]}" "$wheel_root"
+          cs="$(find "$wheel_root" -type f -path "*/scripts/cs${ext}" -print -quit)"
+          template="$(find "$wheel_root" -type f -path "*/scripts/cs-template${ext}" -print -quit)"
+          if [ -z "$cs" ] || [ -z "$template" ]; then
+            echo "Wheel does not contain both runtime scripts." >&2
+            exit 1
+          fi
+          chmod +x "$cs" "$template" || true
+          out_dir="${RUNNER_TEMP}/wheel-pair-${TARGET}"
+          "$cs" build \
+            --artifact-layout online \
+            --runtime-name wheel-pair \
+            --delegate-executable conda \
+            --platform "$PLATFORM" \
+            --target "$TARGET" \
+            --target-label "$TARGET" \
+            --template "$template" \
+            --root tests/fixtures/structural-runtime \
+            --out-dir "$out_dir"
+          manifest="$out_dir/wheel-pair-${TARGET}.sha256"
+          if command -v sha256sum >/dev/null 2>&1; then
+            (cd "$out_dir" && sha256sum --check "$(basename "$manifest")")
+          else
+            (cd "$out_dir" && shasum --algorithm 256 --check "$(basename "$manifest")")
+          fi
 
       - name: Attest wheel
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -602,6 +690,8 @@ jobs:
         shell: bash
         env:
           CS_PATH: ${{ steps.released_action.outputs.cs-path || steps.tagged_action.outputs.cs-path }}
+          DIST_PATH: ${{ steps.released_action.outputs.dist-path || steps.tagged_action.outputs.dist-path }}
+          CHECKSUMS_PATH: ${{ steps.released_action.outputs.checksums-path || steps.tagged_action.outputs.checksums-path }}
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
@@ -611,6 +701,27 @@ jobs:
             exit 1
           fi
           "$CS_PATH" package-update --help >/dev/null
+          manifest="$(basename "$CHECKSUMS_PATH")"
+          if command -v sha256sum >/dev/null 2>&1; then
+            (cd "$DIST_PATH" && sha256sum --check "$manifest")
+          else
+            (cd "$DIST_PATH" && shasum --algorithm 256 --check "$manifest")
+          fi
+
+      - name: Verify macOS action output signature
+        if: contains(matrix.target, 'apple-darwin')
+        shell: bash
+        env:
+          BINARY_PATH: ${{ steps.released_action.outputs.binary-path || steps.tagged_action.outputs.binary-path }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+
+          codesign --verify --deep --strict --verbose=4 "$BINARY_PATH"
+          resigned="${RUNNER_TEMP}/release-action-${TARGET}-resigned"
+          cp "$BINARY_PATH" "$resigned"
+          codesign --force --sign - "$resigned"
+          codesign --verify --deep --strict --verbose=4 "$resigned"
 
       - name: Download candidate assets
         if: github.event_name == 'workflow_dispatch'
@@ -650,6 +761,20 @@ jobs:
           "$cs" "${build_args[@]}"
           test "$(find "$out_dir" -maxdepth 1 -type f -name '*.info.json' | wc -l | tr -d ' ')" = 1
           test "$(find "$out_dir" -maxdepth 1 -type f -name '*.cdx.json' | wc -l | tr -d ' ')" = 1
+          manifest="$(find "$out_dir" -maxdepth 1 -type f -name '*.sha256')"
+          if command -v sha256sum >/dev/null 2>&1; then
+            (cd "$out_dir" && sha256sum --check "$(basename "$manifest")")
+          else
+            (cd "$out_dir" && shasum --algorithm 256 --check "$(basename "$manifest")")
+          fi
+          if [[ "$TARGET" == *"apple-darwin"* ]]; then
+            runtime="$out_dir/release-smoke-${TARGET}"
+            codesign --verify --deep --strict --verbose=4 "$runtime"
+            resigned="${RUNNER_TEMP}/release-smoke-${TARGET}-resigned"
+            cp "$runtime" "$resigned"
+            codesign --force --sign - "$resigned"
+            codesign --verify --deep --strict --verbose=4 "$resigned"
+          fi
 
   finalize-github-release:
     name: Publish verified GitHub release
