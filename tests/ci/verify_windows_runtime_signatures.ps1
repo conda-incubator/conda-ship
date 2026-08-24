@@ -88,14 +88,23 @@ function Assert-RuntimeReadFailure {
   )
   New-Item -ItemType Directory -Path $packageDir | Out-Null
   Write-Host "Checking runtime-data rejection: $Label"
-  $output = & $CsExecutable package-update `
-    --info $Info `
-    --binary $Binary `
-    --out-dir $packageDir 2>&1 | Out-String
-  $status = $LASTEXITCODE
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    $output = & $CsExecutable package-update `
+      --info $Info `
+      --binary $Binary `
+      --out-dir $packageDir 2>&1 | Out-String
+    $status = $LASTEXITCODE
+  }
+  finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
   if ($status -eq 0 -or $output -notmatch [regex]::Escape($Expected)) {
     throw "$Label was not rejected as expected: $output"
   }
+  # GitHub's PowerShell wrapper exits with the final native-command status.
+  $global:LASTEXITCODE = 0
 }
 
 function Assert-SignedRuntimeExecutes {
