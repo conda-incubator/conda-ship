@@ -87,12 +87,11 @@ Preview runtime metadata and artifact names without writing release files.
 
 ## Build A Runtime
 
-`[tool.conda-ship].runtime-name`, `[tool.conda-ship].delegate-executable`,
-`[tool.conda-ship].source-environment`, and a downstream runtime version are
-required unless you pass the runtime, delegate, and version through CLI flags.
-conda-ship does not provide default values for them. The version can come from
-`[tool.conda-ship].runtime-version`, static `[project].version`, or explicit
-project metadata resolution.
+Set `source-environment` in `[tool.conda-ship]`. Also provide a runtime name,
+delegate, and version in the manifest or through CLI flags. See the
+[configuration reference](../reference/configuration.md) for version sources
+and required fields. When using `{ from = "project-metadata" }`, run
+`conda ship build` so the Python adapter can resolve the version.
 
 ```bash
 cs build

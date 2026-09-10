@@ -55,8 +55,7 @@ demo info
 ```
 
 Pass the directory that contains the package archive files themselves. A bundle
-directory is not a conda channel mirror; conda-ship looks for top-level `.conda`
-and `.tar.bz2` files named in the runtime lock.
+contains top-level `.conda` and `.tar.bz2` files named in the runtime lock.
 
 The bundle, offline, and prefix controls are derived from the runtime name. For
 a runtime named `demo`, they are `DEMO_BUNDLE`, `DEMO_OFFLINE`, and
@@ -67,9 +66,8 @@ For a runtime named `conda`, use `CONDA_SHIP_PREFIX`. The runtime deliberately
 does not interpret an activated `CONDA_PREFIX` as its installation path.
 
 ```{note}
-External bundles are transport artifacts, not package indexes. Do not add
-`linux-64/`, `noarch/`, or `repodata.json`; pass the directory containing the
-package archives directly.
+Pass the directory containing the package archives directly. Do not add
+`linux-64/`, `noarch/`, or `repodata.json`.
 ```
 
 ## Bootstrap From An Embedded Bundle
@@ -84,9 +82,9 @@ The runtime extracts the compressed package archives to a temporary directory
 during bootstrap and installs from that extracted bundle without network
 access.
 
-Embedded bundle extraction is deliberately narrow. The embedded tar archive may
-only contain top-level package archive files. Nested paths, directory entries,
-symbolic links, hard links, and non-package files are rejected before install.
+The embedded tar archive may only contain top-level package archive files.
+Nested paths, directory entries, symbolic links, hard links, and non-package
+files are rejected before install.
 
 ```{important}
 Keep embedded bundles as package archives only. conda-ship rejects paths and
@@ -95,5 +93,5 @@ bundle directory during bootstrap.
 ```
 
 An explicit `DEMO_BUNDLE` value still takes priority over the embedded bundle.
-Use that override to test a replacement package set without rebuilding the
-binary.
+The supplied archives must still match the packages and hashes in the runtime
+lock. To change the package set, update the source lockfile and rebuild.

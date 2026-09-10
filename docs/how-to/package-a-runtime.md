@@ -46,7 +46,7 @@ all files produced by the build.
   with:
     conda-ship-version: "X.Y.Z"
 
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
   with:
     name: ${{ steps.cs.outputs.asset-name }}
     path: ${{ steps.cs.outputs.dist-path }}
@@ -152,7 +152,7 @@ ownership with the stable Homebrew `bin` link before checking for an update.
 A conda package can install the runtime binary into the package environment.
 This is useful for distributing a downstream runtime in a conda channel.
 
-Keep two boundaries clear:
+The two installation steps are:
 
 - the conda package installs the runtime binary
 - the generated runtime bootstraps and owns its managed prefix
@@ -229,12 +229,12 @@ when the image will run as different users.
 Before handing files to another system:
 
 ```bash
-shasum -a 256 --check dist/*.sha256
+(cd dist && shasum -a 256 --check ./*.sha256)
 ```
 
 The build checksum describes the staged executable. If signing changes those
 bytes, keep the build metadata for identity checks and pass the finalized file
-to `cs package-update --binary`. Its JSON output reports the package and payload
+to `cs package-update --binary`. Add `--json` to report the package and payload
 digests for the finalized bytes.
 
 For GitHub Action builds, also keep the release attestation checks enabled in

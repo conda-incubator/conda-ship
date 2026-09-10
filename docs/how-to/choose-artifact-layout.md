@@ -62,13 +62,17 @@ This stages:
 - `RUNTIME.bundle.tar.zst`
 - metadata files
 
-Use this layout when an installer, archive, or enterprise deployment system can
-place the runtime and bundle side by side. Set the bundle and offline variables
-derived from the runtime name on first invocation:
+Extract the bundle, then set the bundle and offline variables derived from the
+runtime name on first invocation:
 
 ```bash
-DEMO_BUNDLE=./bundle-dir DEMO_OFFLINE=1 demo info
+mkdir -p bundle-dir
+tar -I zstd -xf dist/demo.bundle.tar.zst -C bundle-dir
+DEMO_BUNDLE="$PWD/bundle-dir" DEMO_OFFLINE=1 ./dist/demo info
 ```
+
+The runtime reads the extracted directory. It does not find or extract an
+adjacent `.bundle.tar.zst` file automatically.
 
 For another runtime name, derive the variable names by uppercasing it and
 replacing non-alphanumeric characters with underscores.
@@ -113,12 +117,11 @@ of the compressed embedded bundle in addition to the extracted packages.
 | Runtime and packages should be distributed separately | `external` |
 | Installer can unpack a bundle next to the runtime | `external` |
 | One file should bootstrap offline | `embedded` |
-| Release channel has strict single-binary ergonomics | `embedded` |
 
 ## Keep The Layout Out Of The Solve
 
 Do not create separate source environments only to change layout. Keep package
-and channel intent in the source manifest, commit the lockfile, and override
+and channel settings in the source manifest, commit the lockfile, and override
 layout at build time when needed:
 
 ```bash

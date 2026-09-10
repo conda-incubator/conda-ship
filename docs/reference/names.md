@@ -85,7 +85,7 @@ install scheme path for `express`, such as `~/.conda/express` with the default
   It is an executable name, not a path.
 
 `artifact-layout`
-: Artifact transport shape: `online`, `external`, or `embedded`.
+: How package archives are distributed: `online`, `external`, or `embedded`.
 
 `exclude-packages`
 : Package names removed from the derived runtime lock.
@@ -155,5 +155,6 @@ dist/cxz.cdx.json
 dist/cxz.sha256
 ```
 
-The generated runtime still uses `cx` for display, install metadata, and
-runtime-specific environment variables unless those are configured separately.
+The generated runtime still uses `cx` for display and runtime-specific
+environment variables. Its managed prefix defaults to `~/.conda/cx`.
+Set `install-name` or `install-scheme` to change that default location.

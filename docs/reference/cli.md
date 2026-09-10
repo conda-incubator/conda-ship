@@ -56,8 +56,8 @@ Options:
 
 - `--runtime-name RUNTIME`: override `[tool.conda-ship].runtime-name`.
 - `--artifact-name NAME`: override `[tool.conda-ship].artifact-name` for the
-  staged executable and artifact stem. When omitted, artifacts use
-  `--runtime-name` exactly.
+  staged executable and artifact stem. When the flag is omitted, the manifest
+  value is used. Without either setting, artifacts use the runtime name.
 - `--delegate-executable EXECUTABLE`: override `[tool.conda-ship].delegate-executable`.
 - `--runtime-version VERSION`: version stamped into generated runtime metadata.
   Overrides `[tool.conda-ship].runtime-version`, `[project].version`, and
@@ -72,7 +72,8 @@ Options:
   selection. It also selects the staged `.exe` suffix for Windows artifacts.
   Path-like custom target specifications are not supported here.
 - `--template PATH`: prebuilt generic runtime template binary to copy and
-  stamp. When omitted, packaged builds use the template installed next to `cs`.
+  stamp. When omitted, `CONDA_SHIP_TEMPLATE` takes precedence over the template
+  installed next to `cs`. Supplying `--target` disables installed-template lookup.
 - `--docs-url URL`: documentation URL stamped into runtime metadata. Must
   start with `https://` or `http://` and must not contain whitespace or control
   characters.
@@ -80,7 +81,9 @@ Options:
   supported: `conda-home`, which installs below `~/.conda/INSTALL_NAME`, and
   `user-data`, which installs below the platform user data directory.
 - `--install-name NAME`: directory name for this runtime's managed base prefix
-  under the install scheme. Defaults to `RUNTIME`.
+  under the install scheme. Overrides the manifest `install-name` setting,
+  including a derived name. Without either setting, the install name is the
+  runtime name.
 - `--installer INSTALLER`: package manager or installer stamped into runtime
   metadata. Overrides `[tool.conda-ship].installer`.
 - `--out-dir PATH`: write staged artifacts somewhere other than `dist/`.
@@ -108,8 +111,8 @@ Options:
 
 - `--runtime-name RUNTIME`: override `[tool.conda-ship].runtime-name`.
 - `--artifact-name NAME`: override `[tool.conda-ship].artifact-name` for the
-  staged executable and artifact stem. When omitted, artifacts use
-  `--runtime-name` exactly.
+  staged executable and artifact stem. When the flag is omitted, the manifest
+  value is used. Without either setting, artifacts use the runtime name.
 - `--delegate-executable EXECUTABLE`: override `[tool.conda-ship].delegate-executable`.
 - `--runtime-version VERSION`: version stamped into generated runtime metadata.
   Overrides `[tool.conda-ship].runtime-version`, `[project].version`, and
@@ -120,14 +123,17 @@ Options:
   When omitted, `cs` uses `[tool.conda-ship].artifact-layout` or `online`.
 - `--platform PLATFORM`: choose the conda platform for metadata and bundles.
 - `--template PATH`: prebuilt generic runtime template binary to copy and
-  stamp. When omitted, packaged builds use the template installed next to `cs`.
+  stamp. When omitted, `CONDA_SHIP_TEMPLATE` takes precedence over the template
+  installed next to `cs`.
 - `--docs-url URL`: documentation URL stamped into runtime metadata. Must
   start with `https://` or `http://` and must not contain whitespace or control
   characters.
 - `--install-scheme SCHEME`: install scheme stamped into the runtime. Currently
   supported: `conda-home` and `user-data`.
 - `--install-name NAME`: directory name for this runtime's managed base prefix
-  under the install scheme. Defaults to `RUNTIME`.
+  under the install scheme. Overrides the manifest `install-name` setting,
+  including a derived name. Without either setting, the install name is the
+  runtime name.
 - `--installer INSTALLER`: package manager or installer stamped into runtime
   metadata.
 - `--install-path PATH`: managed prefix path used by the staged runtime for

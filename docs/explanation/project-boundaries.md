@@ -1,10 +1,10 @@
-# Project Boundaries
+# Project Scope
 
 conda-ship builds ready-to-run conda runtimes. It is not itself a conda
 distribution.
 
-The split from conda-express puts the generic pieces here and leaves
-distribution policy in downstream projects.
+conda-ship provides the builder and runtime code. Downstream projects choose
+the packages, settings, and release process for their distributions.
 
 ## Ownership At A Glance
 
@@ -27,7 +27,7 @@ documentation.
 
 ## What conda-ship Owns
 
-conda-ship owns the reusable build and runtime machinery:
+conda-ship provides the reusable build and runtime code:
 
 - deriving a runtime lock from a conda or Pixi source lockfile
 - pruning excluded packages and exclusive dependencies after the solve
@@ -92,7 +92,7 @@ runtime executable update path automatically.
 {external+conda-express:doc}`conda-express <index>` is the downstream
 distribution that publishes `cx` and `cxz`.
 
-It owns the opinionated native conda package set, the `cx`/`cxz` runtime names,
+It chooses the conda package set, the `cx`/`cxz` runtime names,
 Homebrew and shell-script installation, Docker images, Python or conda
 distribution wrappers, and release policy for those artifacts.
 
@@ -122,5 +122,4 @@ distribution needs them.
 
 The {external+conda-express:doc}`conda-express docs <index>` are useful as a
 concrete example of a downstream distribution. They describe `cx` and `cxz` as
-products; conda-ship docs describe how to build and reason about products
-like them.
+products. conda-ship docs describe how to build runtimes like them.

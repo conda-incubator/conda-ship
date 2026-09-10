@@ -1,11 +1,7 @@
 # Configuration Reference
 
-conda-ship reads project intent from a conda-compatible manifest and concrete
-package records from the matching lockfile.
-
-Downstream distributions maintain these values in their own project manifest.
-conda-ship treats the values as build input. It does not define a universal
-conda distribution.
+Configure the runtime in your project manifest. conda-ship reads the selected
+environment's resolved package records from the matching lockfile.
 
 `cs inspect`, `cs build`, and `cs run` can read the supported manifest and
 lockfile pairs.
@@ -69,9 +65,9 @@ example `[tool.conda.feature.ship.dependencies]`. Pixi sections live below
 
 conda-ship does not require specific packages in the selected environment. The
 environment must provide the configured delegate executable. Conda-like
-distributions include `conda` and the plugins they use. `RUNTIME shell` is
-available when the selected conda-spawn version provides the alias from
-[conda-spawn PR #59](https://github.com/conda/conda-spawn/pull/59).
+distributions include `conda` and the plugins they use. For example,
+`RUNTIME shell` is available when the selected conda-spawn version provides
+`conda shell`.
 Generated runtimes automatically install the selected environment
 as the managed base prefix, then pass every argument to the configured delegate
 executable inside that prefix.
@@ -138,13 +134,15 @@ For the naming model behind `runtime-name`, `artifact-name`, `install-name`, and
   The Python `conda ship` adapter resolves this source before invoking `cs`: it
   calls the project's PEP 517 `prepare_metadata_for_build_wheel` hook, reads
   `Version` from the generated `.dist-info/METADATA`, and passes the resolved
-  value to `cs --runtime-version`. It does not fall back to building a wheel.
-  The build backend must already be installed in the Python environment running
+  value as `--runtime-version` on `cs build` or `cs run`. It does not fall back
+  to building a wheel. The build backend must already be installed in the
+  Python environment running
   `conda ship`.
 
 `delegate-executable`
-: Executable inside the managed prefix that receives every argument after
-  automatic bootstrap. Use `conda` for conda-like runtimes such as `cx`. Other
+: Required executable name inside the managed prefix that receives every
+  argument after automatic bootstrap. Set it here or pass
+  `--delegate-executable`. Use `conda` for conda-like runtimes such as `cx`. Other
   values, such as `python`, are supported when a runtime should expose a
   different command interface.
 
@@ -316,8 +314,8 @@ inside the managed prefix. That file is used for ownership checks before later
 operations touch the prefix. It is written last to mark bootstrap complete.
 The internal installing marker is then removed.
 
-When executable updates are configured, the same `.RUNTIME_NAME.json` file is
-the canonical persistent update and recovery record. It records the stable
+When executable updates are configured, the same `.RUNTIME_NAME.json` file
+stores update and recovery state. It records the stable
 executable path, artifact identity, update channel and package, build number,
 installed ownership, installation kind, executable SHA256, optional external
 instruction, and any pending replacement. The adjacent

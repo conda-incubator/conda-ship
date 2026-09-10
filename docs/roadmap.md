@@ -16,11 +16,9 @@ Every staged build writes the runtime plus artifact metadata: the runtime
 lock, a package list, a CycloneDX SBOM, an info JSON file, and SHA256 checksums.
 `cs build --dry-run` validates planned artifact work without writing files.
 
-Generic runtime behavior lives in `cs`. This includes automatic bootstrap and
-the executable update path when a stamped runtime opts into update
-configuration.
-Opinionated package sets and distribution defaults belong in downstream
-projects.
+Generated runtime behavior lives in `cs-template`. This includes automatic
+bootstrap and executable updates when the runtime has update configuration.
+Downstream projects choose their own package sets and distribution defaults.
 
 The repository stays focused on producing runtimes. Distribution
 wrappers such as Homebrew formulae, constructor-based installers, Docker images,
@@ -34,16 +32,9 @@ reusing conda-ship package installation, metadata, offline bundle code, shared
 package cache, prefix mutation locking, and interrupted-install recovery.
 Stamped runtime artifacts remain the primary conda-ship output.
 
-The initial API includes:
-
-- no solving
-- no catalog
-- no update or repair workflow
-- no runtime command namespace
-- no synthetic conda activation environment
-- no global PATH mutation
-- no filesystem-mutating shim writer
-- no conda-ship-owned update flow for launchers created by Fleet callers
+The API installs, lists, inspects, and removes prefixes using locks supplied by
+the caller. It also returns command and shim plans. Callers provide their own
+catalog, solver, launchers, shell setup, and update or repair workflows.
 
 See [fleet concepts](explanation/fleet.md) and the
 [API reference](reference/fleet.md).
@@ -64,7 +55,7 @@ distribution builds:
 - `[tool.conda-ship].delegate-executable` chooses which executable receives
   every argument after automatic bootstrap.
 - `[tool.conda-ship].exclude-packages` records post-solve pruning policy.
-- Package and channel intent comes from
+- Package and channel settings come from
   {external+conda-workspaces:doc}`conda workspace sections <reference/conda-toml-spec>`
   when `conda.toml` is available.
 - `conda-ship` provides a `conda ship` adapter while preserving
@@ -77,8 +68,8 @@ runtimes without a conda-ship source checkout.
 Current follow-up work is mostly distribution hardening:
 
 - add richer provenance examples for package-manager specific release workflows
-- keep the GitHub Action intentionally lockfile-first, with package and channel
-  changes made in committed project manifests rather than action inputs
+- keep builds based on committed manifests and lockfiles, with package and
+  channel changes made in the manifest
 - keep full Windows ARM64 conda runtime bootstrap coverage behind the regular
   canary until the conda package ecosystem has enough stable `win-arm64`
   runtime coverage

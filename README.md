@@ -8,22 +8,23 @@
 
 Build ready-to-run conda runtimes from solved conda environments.
 
-`conda-ship` is a generic builder for single-binary conda runtimes. It
-provides the `cs` builder CLI, the `cs-template` generic runtime template, a
-composite GitHub Action, and an optional Python adapter that exposes
-`conda ship` inside conda.
+`conda-ship` builds executables that install a locked conda environment on
+first use, then run a command from that environment. The installation
+directory is called the **managed prefix**. The command, usually `conda` or
+`python`, is the **delegate**.
 
-The project is currently alpha and pre-1.0. The split from
-[`conda-express`](https://jezdez.github.io/conda-express/) is now explicit:
-conda-ship owns the reusable build/runtime machinery, while downstream
-distributions own their package sets, runtime names, release channels, installer
-wrappers, and user documentation. conda-express is one downstream distribution
-maintained by Jannis Leidel; it uses conda-ship to publish the `cx` and `cxz`
-runtimes.
+The package provides the `cs` builder CLI, the `cs-template` runtime template,
+and a Python adapter for `conda ship`. A composite GitHub Action builds
+runtimes in CI. The project is currently alpha and pre-1.0.
+
+Downstream distributions choose their package sets, runtime names, release
+channels, installers, and user documentation. For example,
+[`conda-express`](https://jezdez.github.io/conda-express/) uses conda-ship to
+publish the `cx` and `cxz` runtimes.
 
 ## Quickstart
 
-This shortest path uses conda-workspaces to create a solved source environment,
+This example uses conda-workspaces to create a solved source environment,
 then builds an online runtime named `demo`:
 
 ```bash
@@ -79,7 +80,7 @@ It then passes every argument to the configured delegate executable, usually
 subcommand. conda-ship does not reserve those arguments.
 
 The finished executable contains the native bootstrap and optional update
-machinery from `cs-template`. Neither the executable nor its managed prefix
+code from `cs-template`. Neither the executable nor its managed prefix
 needs the conda-ship Python package.
 
 During bootstrap, generated runtimes also write constructor-compatible conda
@@ -111,8 +112,8 @@ Supported manifest and lockfile pairs:
 - `pixi.toml` plus `pixi.lock`
 - `pyproject.toml` with nonempty `[tool.pixi.workspace]` plus `pixi.lock`
 
-The package and channel intent lives in the selected source environment.
-`[tool.conda-ship]` only records conda-ship build policy:
+The selected source environment defines the packages and channels.
+`[tool.conda-ship]` configures the runtime build:
 
 ```toml
 [tool.conda-ship]
@@ -243,7 +244,7 @@ Useful starting points:
 - [Build your first runtime](https://conda-incubator.github.io/conda-ship/tutorials/first-runtime/)
 - [Build in GitHub Actions](https://conda-incubator.github.io/conda-ship/how-to/build-in-github-actions/)
 - [Configuration reference](https://conda-incubator.github.io/conda-ship/reference/configuration/)
-- [Project boundaries](https://conda-incubator.github.io/conda-ship/explanation/project-boundaries/)
+- [Project scope](https://conda-incubator.github.io/conda-ship/explanation/project-boundaries/)
 
 ## Development
 

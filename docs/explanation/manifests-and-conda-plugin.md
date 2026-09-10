@@ -46,9 +46,9 @@ is build output, not another source project lockfile.
 
 ## Conda Workspace Shape
 
-A conda-workspaces project puts conda intent in the
+A conda-workspaces project defines packages and channels using the
 {external+conda-workspaces:doc}`conda-workspaces schema <reference/conda-toml-spec>`
-and conda-ship-specific build policy in `[tool.conda-ship]`:
+and configures the runtime build in `[tool.conda-ship]`:
 
 ```toml
 [workspace]
@@ -77,7 +77,7 @@ exclude-packages = ["conda-libmamba-solver"]
 turn into a runtime, which packages to prune after the solve, artifact naming
 policy, bundle policy, and runtime documentation links.
 
-Package and channel intent belongs in the
+Package and channel settings belong in the
 {external+conda-workspaces:doc}`conda workspace sections <reference/conda-toml-spec>`
 when that manifest is available. conda-ship reads the selected lockfile
 environment and stamps the resolved package names and channel URLs into runtime
@@ -93,25 +93,17 @@ that table is not a supported source manifest.
 
 ## CLI Entry Points
 
-`cs ...` is the primary command. When `conda-ship` is installed in a
-conda environment, `conda ship ...` can also be available as a conda-style
-shortcut for the same builder:
+`cs` is the primary builder command. The Python adapter also provides
+`conda ship` when installed in a conda environment. It runs the same `cs`
+builder and forwards the arguments.
 
-- `cs ...` remains the primary CLI.
-- `conda ship ...` runs the installed `cs` executable.
-- conda-ship does not require this shortcut to work.
-- the shortcut does not make conda-ship part of conda itself.
+By default, the adapter uses the `cs` executable next to the current Python
+interpreter. It does not search `PATH`. Set `CONDA_SHIP_EXECUTABLE` to select
+a different executable for tests or custom packaging. An invalid override
+causes an error. See {doc}`../reference/conda-plugin` for packaging requirements
+and project metadata version support.
 
-The builder identity remains `cs`, and downstream distributions still own
-the runtimes they publish.
-
-The Python adapter first looks for the `cs` executable next to the current
-Python interpreter, then falls back to `PATH`. Conda recipes for
-`conda-ship` package the Rust-built `cs` binary and the adapter in the
-same environment. For adapter tests or custom packaging,
-`CONDA_SHIP_EXECUTABLE` points at a specific executable.
-
-## Runtime Template Boundary
+## Builder And Runtime Template
 
 The downstream project manifest lives in the downstream repository. The
 conda-ship builder and generic runtime template come from the conda-ship
