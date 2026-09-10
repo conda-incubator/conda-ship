@@ -107,9 +107,9 @@ its own.
 Supported manifest and lockfile pairs:
 
 - `conda.toml` plus `conda.lock`
-- `pyproject.toml` with `[tool.conda]` plus `conda.lock`
+- `pyproject.toml` with nonempty `[tool.conda.workspace]` plus `conda.lock`
 - `pixi.toml` plus `pixi.lock`
-- `pyproject.toml` with `[tool.pixi]` plus `pixi.lock`
+- `pyproject.toml` with nonempty `[tool.pixi.workspace]` plus `pixi.lock`
 
 The package and channel intent lives in the selected source environment.
 `[tool.conda-ship]` only records conda-ship build policy:

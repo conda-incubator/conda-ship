@@ -12,11 +12,9 @@ Self-hosted runners must provide the GitHub CLI because attestation
 verification uses `gh attestation verify`.
 
 The action builds only from committed project input. The selected root must
-contain `conda.toml` plus `conda.lock`, `pyproject.toml` with `[tool.conda]`
-plus `conda.lock`, `pixi.toml` plus `pixi.lock`, or `pyproject.toml` with
-`[tool.pixi]` plus `pixi.lock`. When the manifest or matching lockfile is
-missing, the action fails instead of generating or solving project configuration
-in CI. This minimal example assumes the manifest contains
+contain a supported {doc}`manifest and lockfile pair <configuration>`.
+When the manifest or matching lockfile is missing, the action fails instead of
+generating or solving project configuration in CI. This minimal example assumes the manifest contains
 `[tool.conda-ship].runtime-name`,
 `[tool.conda-ship].delegate-executable`, and a downstream runtime version.
 
@@ -70,8 +68,9 @@ inputs do not set up Python.
 
 `root`
 : Project root containing `conda.toml`/`conda.lock`, `pixi.toml`/`pixi.lock`,
-  or `pyproject.toml` with either `[tool.conda]`/`conda.lock` or
-  `[tool.pixi]`/`pixi.lock`. Defaults to the workflow workspace.
+  or `pyproject.toml` with a nonempty `[tool.conda.workspace]` and `conda.lock`,
+  or a nonempty `[tool.pixi.workspace]` and `pixi.lock`.
+  Defaults to the workflow workspace.
 
 `artifact-layout`
 : Artifact layout to build. Supported values are `online`, `external`, and

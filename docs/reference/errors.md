@@ -12,7 +12,9 @@ conda without depending on terminal formatting.
 : Run from the project root or pass `--root PATH`.
 
 `could not find conda.toml, pixi.toml, or supported pyproject.toml`
-: Add a supported manifest to the selected root.
+: Add a supported manifest to the selected root. A `pyproject.toml` needs a
+  nonempty `[tool.conda.workspace]` or `[tool.pixi.workspace]` table.
+  `[tool.conda-ship]` alone does not define a source workspace.
 
 `lockfile not found`
 : Refresh and commit the matching source lockfile with `conda workspace lock`
@@ -23,6 +25,11 @@ conda without depending on terminal formatting.
 
 `source environment "NAME" not found`
 : Add the environment to the source manifest and refresh the source lockfile.
+
+`source environment "NAME" contains unsupported PyPI packages`
+: Diagnostic kind: `unsupported_pypi_packages`. Use conda packages or select a
+  source environment containing only conda packages, then refresh the lockfile
+  with `conda workspace lock` or `pixi lock`.
 
 `runtime version is required`
 : Pass `--runtime-version`, set `[tool.conda-ship].runtime-version`, define
