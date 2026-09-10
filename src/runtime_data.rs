@@ -218,7 +218,7 @@ impl RuntimeDataHeader {
             metadata_file: format!(".{name}.json"),
             bundle_env_var: runtime_env_var(name, "BUNDLE"),
             offline_env_var: runtime_env_var(name, "OFFLINE"),
-            docs_url: "https://jezdez.github.io/conda-ship/".to_string(),
+            docs_url: "https://conda-incubator.github.io/conda-ship/".to_string(),
             installer: None,
             update: None,
             runtime_config: RuntimeConfig::default(),

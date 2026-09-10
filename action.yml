@@ -146,7 +146,7 @@ runs:
         version="${version#refs/tags/}"
         if [[ ! "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
           echo "Could not infer a conda-ship release tag from ${version:-<empty>}." >&2
-          echo "Use jezdez/conda-ship@X.Y.Z or pass conda-ship-version: X.Y.Z when pinning the action by commit SHA." >&2
+          echo "Use conda-incubator/conda-ship@X.Y.Z or pass conda-ship-version: X.Y.Z when pinning the action by commit SHA." >&2
           exit 1
         fi
 
@@ -168,7 +168,10 @@ runs:
           repository="$ACTION_REPOSITORY"
         fi
         if [ -z "$repository" ]; then
-          repository="jezdez/conda-ship"
+          repository="conda-incubator/conda-ship"
+        fi
+        if [ "$repository" = "jezdez/conda-ship" ]; then
+          repository="conda-incubator/conda-ship"
         fi
         if [[ ! "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
           echo "Invalid action repository: ${repository}" >&2
@@ -210,16 +213,45 @@ runs:
           --pattern "$TEMPLATE_ASSET" \
           --pattern SHA256SUMS
 
-        signer_workflow="${CONDA_SHIP_REPOSITORY}/.github/workflows/release.yml"
-        gh attestation verify "${TOOL_DIR}/${CS_ASSET}" \
-          --repo "$CONDA_SHIP_REPOSITORY" \
-          --signer-workflow "$signer_workflow" >/dev/null
-        gh attestation verify "${TOOL_DIR}/${TEMPLATE_ASSET}" \
-          --repo "$CONDA_SHIP_REPOSITORY" \
-          --signer-workflow "$signer_workflow" >/dev/null
-        gh attestation verify "${TOOL_DIR}/SHA256SUMS" \
-          --repo "$CONDA_SHIP_REPOSITORY" \
-          --signer-workflow "$signer_workflow" >/dev/null
+        signer_repository="$CONDA_SHIP_REPOSITORY"
+        if [ "$CONDA_SHIP_REPOSITORY" = "conda-incubator/conda-ship" ]; then
+          case "$CONDA_SHIP_VERSION" in
+            0.1.0|0.2.0|0.2.1|0.3.0|0.3.1|0.3.2|0.4.0|0.5.0|0.6.0|0.6.1|0.6.2|0.6.3|0.6.4|0.7.0|0.8.0|0.9.0)
+              # Published before the transfer on 2026-09-10.
+              signer_repository="jezdez/conda-ship"
+              ;;
+          esac
+        fi
+        signer_workflow="${signer_repository}/.github/workflows/release.yml"
+        if [ "$signer_repository" = "jezdez/conda-ship" ]; then
+          # GitHub retains these bundles under the original owner's account.
+          bundle_dir="$(mktemp -d)"
+          trap 'rm -rf "$bundle_dir"' EXIT
+        fi
+        for asset in "$CS_ASSET" "$TEMPLATE_ASSET" SHA256SUMS; do
+          if [ "$signer_repository" = "jezdez/conda-ship" ]; then
+            (
+              cd "$bundle_dir"
+              gh attestation download "${TOOL_DIR}/${asset}" --owner jezdez >/dev/null
+              shopt -s nullglob
+              bundles=(*.jsonl)
+              if [ "${#bundles[@]}" -ne 1 ]; then
+                echo "Expected one attestation bundle for ${asset}." >&2
+                exit 1
+              fi
+              gh attestation verify "${TOOL_DIR}/${asset}" \
+                --bundle "${bundles[0]}" \
+                --repo "$signer_repository" \
+                --signer-workflow "$signer_workflow" \
+                --source-ref "refs/tags/${CONDA_SHIP_VERSION}" >/dev/null
+              rm -- "${bundles[0]}"
+            )
+          else
+            gh attestation verify "${TOOL_DIR}/${asset}" \
+              --repo "$signer_repository" \
+              --signer-workflow "$signer_workflow" >/dev/null
+          fi
+        done
 
         grep -F "  ${CS_ASSET}" "${TOOL_DIR}/SHA256SUMS" > "${TOOL_DIR}/SHA256SUMS.selected"
         grep -F "  ${TEMPLATE_ASSET}" "${TOOL_DIR}/SHA256SUMS" >> "${TOOL_DIR}/SHA256SUMS.selected"

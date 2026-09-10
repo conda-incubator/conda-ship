@@ -755,7 +755,7 @@ fn install_scheme_name(scheme: runtime_data::InstallScheme) -> &'static str {
 }
 
 fn default_docs_url() -> String {
-    "https://jezdez.github.io/conda-ship/".to_string()
+    "https://conda-incubator.github.io/conda-ship/".to_string()
 }
 
 #[allow(clippy::too_many_arguments)]
