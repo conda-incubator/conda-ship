@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.urls]
-repository = "https://github.com/jezdez/conda-ship"
+repository = "https://github.com/conda-incubator/conda-ship"
 
 [project.entry-points.conda]
 conda-ship = "conda_ship.plugin"

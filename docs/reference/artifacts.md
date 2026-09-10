@@ -210,13 +210,33 @@ generate a downstream final manifest. Pass the finalized file to
 command snapshots those bytes and reports the finalized payload digest in its
 JSON output, but does not rewrite the original metadata files.
 
-Verify a downloaded release asset with:
+Verify assets published after the move to `conda-incubator` with:
 
 ```bash
 gh attestation verify ./cs-x86_64-unknown-linux-gnu \
-  -R jezdez/conda-ship \
-  --signer-workflow jezdez/conda-ship/.github/workflows/release.yml
+  -R conda-incubator/conda-ship \
+  --signer-workflow conda-incubator/conda-ship/.github/workflows/release.yml
 ```
+
+Releases through 0.9.0 were published by `jezdez/conda-ship`. Their signed
+repository and workflow identities retain that name, and GitHub serves their
+attestation bundles from the original owner's account. For example, verify
+the 0.9.0 checksum manifest in an otherwise empty directory with:
+
+```bash
+gh release download 0.9.0 -R conda-incubator/conda-ship --pattern SHA256SUMS
+gh attestation download ./SHA256SUMS --owner jezdez
+gh attestation verify ./SHA256SUMS \
+  --bundle ./*.jsonl \
+  -R jezdez/conda-ship \
+  --signer-workflow jezdez/conda-ship/.github/workflows/release.yml \
+  --source-ref refs/tags/0.9.0
+```
+
+Use the same bundle-download and verification commands for each binary.
+Change `--source-ref` to its exact release tag. The current composite action
+handles the published pre-transfer tags explicitly. It does not accept the
+original signer for new release tags.
 
 Downstream distributions can add their own attestations or platform signing
 after conda-ship finishes staging their runtime artifacts.

@@ -9,9 +9,9 @@ edition = "2024"
 description = "Build ready-to-run conda runtimes"
 license = "BSD-3-Clause"
 readme = "README.md"
-repository = "https://github.com/jezdez/conda-ship"
-homepage = "https://jezdez.github.io/conda-ship/"
-documentation = "https://jezdez.github.io/conda-ship/"
+repository = "https://github.com/conda-incubator/conda-ship"
+homepage = "https://conda-incubator.github.io/conda-ship/"
+documentation = "https://conda-incubator.github.io/conda-ship/"
 keywords = ["conda", "bootstrap", "installer", "runtime"]
 include = [
   "/Cargo.lock",

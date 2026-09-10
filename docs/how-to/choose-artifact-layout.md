@@ -134,7 +134,7 @@ strategy:
     layout: [online, embedded]
 
 steps:
-  - uses: jezdez/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
+  - uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
     with:
       conda-ship-version: "X.Y.Z"
       artifact-layout: ${{ matrix.layout }}
