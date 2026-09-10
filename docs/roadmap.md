@@ -55,10 +55,9 @@ distribution builds:
 
 - `conda.toml` is the primary conda-workspaces manifest.
 - `conda.lock` is the matching source lockfile.
-- `pyproject.toml` with `[tool.conda]` is supported through conda-workspaces and
-  uses `conda.lock`.
-- `pixi.toml`/`pixi.lock` and `pyproject.toml` with `[tool.pixi]` are supported
-  for downstream projects that use Pixi for the source solve.
+- `pyproject.toml` with nonempty `[tool.conda.workspace]` uses `conda.lock`.
+- `pixi.toml` or `pyproject.toml` with nonempty `[tool.pixi.workspace]` uses
+  `pixi.lock`.
 - `[tool.conda-ship].source-environment` chooses which solved environment becomes the
   runtime.
 - `[tool.conda-ship].runtime-name` names the generated runtime.

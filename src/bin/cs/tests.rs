@@ -541,6 +541,49 @@ name = "demo-pixi"
     );
 }
 
+#[rstest]
+#[case::empty_conda("[tool.conda]\n")]
+#[case::partial_conda("[tool.conda.dependencies]\npython = \"*\"\n")]
+#[case::empty_conda_workspace("[tool.conda.workspace]\n")]
+#[case::invalid_conda_workspace("[tool.conda]\nworkspace = true\n")]
+fn test_pixi_pyproject_wins_without_conda_workspace(#[case] conda_config: &str) {
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(
+        tmp.path().join("pyproject.toml"),
+        format!(
+            "{conda_config}\n[tool.pixi.workspace]\nname = \"demo\"\n\n[tool.conda-ship]\nsource-environment = \"ship\"\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(tmp.path().join("pixi.lock"), "").unwrap();
+
+    let input = discover_project_input(tmp.path()).unwrap();
+
+    assert_eq!(input.manifest_kind, ManifestKind::PixiPyproject);
+    assert_eq!(input.lock_path, tmp.path().join("pixi.lock"));
+    assert_eq!(input.config.source_environment.as_deref(), Some("ship"));
+}
+
+#[rstest]
+#[case::empty_conda("[tool.conda]\n")]
+#[case::empty_pixi("[tool.pixi]\n")]
+#[case::partial_conda("[tool.conda.dependencies]\npython = \"*\"\n")]
+#[case::partial_pixi("[tool.pixi.dependencies]\npython = \"*\"\n")]
+#[case::empty_conda_workspace("[tool.conda.workspace]\n")]
+#[case::empty_pixi_workspace("[tool.pixi.workspace]\n")]
+#[case::invalid_conda_workspace("[tool.conda]\nworkspace = true\n")]
+#[case::invalid_pixi_workspace("[tool.pixi]\nworkspace = \"demo\"\n")]
+#[case::invalid_toml("[tool.conda.workspace\n")]
+fn test_pyproject_requires_nonempty_workspace_table(#[case] workspace: &str) {
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(tmp.path().join("pyproject.toml"), workspace).unwrap();
+
+    assert!(!is_supported_pyproject_manifest(
+        &tmp.path().join("pyproject.toml")
+    ));
+    assert_eq!(find_project_root(tmp.path()), None);
+}
+
 #[test]
 fn test_pyproject_requires_conda_or_pixi_config() {
     let tmp = TempDir::new().unwrap();

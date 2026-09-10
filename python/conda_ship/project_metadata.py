@@ -140,11 +140,18 @@ class CondaShipProject:
 
     @staticmethod
     def supports_pyproject(data: dict[str, Any]) -> bool:
-        """Return whether ``pyproject.toml`` contains supported conda config."""
+        """Return whether ``pyproject.toml`` contains a supported workspace."""
         tool = data.get("tool", {})
-        return isinstance(tool, dict) and (
-            isinstance(tool.get("conda"), dict) or isinstance(tool.get("pixi"), dict)
-        )
+        if not isinstance(tool, dict):
+            return False
+        for name in ("conda", "pixi"):
+            config = tool.get(name)
+            if not isinstance(config, dict):
+                continue
+            workspace = config.get("workspace")
+            if isinstance(workspace, dict) and workspace:
+                return True
+        return False
 
     @property
     def conda_ship_config(self) -> dict[str, Any]:

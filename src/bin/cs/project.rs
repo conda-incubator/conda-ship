@@ -116,6 +116,20 @@ pub(crate) fn derive_runtime_lock(root: &Path) -> miette::Result<DerivedRuntimeL
             Some("Add the environment to the source manifest, or update source-environment to an environment that exists in the lockfile.".to_string()),
         )
     })?;
+    if runtime_env
+        .pypi_packages_by_platform()
+        .any(|(_, mut packages)| packages.next().is_some())
+    {
+        return Err(ship_error(
+            DiagnosticKind::UnsupportedPypiPackages,
+            format!("source environment {source_environment:?} contains unsupported PyPI packages"),
+            Some(format!(
+                "Use conda packages or select a source environment containing only conda packages, then run `{}` to regenerate {}.",
+                input.manifest_kind.lock_command(),
+                input.manifest_kind.lockfile_name()
+            )),
+        ));
+    }
 
     let platform_data: Vec<_> = runtime_env
         .platforms()
@@ -337,22 +351,22 @@ fn pyproject_manifest_kind(path: &Path) -> Option<ManifestKind> {
         return None;
     };
 
-    if has_toml_table(&value, &["tool", "conda"]) {
+    if has_nonempty_toml_table(&value, &["tool", "conda", "workspace"]) {
         Some(ManifestKind::CondaPyproject)
-    } else if has_toml_table(&value, &["tool", "pixi"]) {
+    } else if has_nonempty_toml_table(&value, &["tool", "pixi", "workspace"]) {
         Some(ManifestKind::PixiPyproject)
     } else {
         None
     }
 }
 
-fn has_toml_table(value: &toml::Value, path: &[&str]) -> bool {
+fn has_nonempty_toml_table(value: &toml::Value, path: &[&str]) -> bool {
     let Some((head, tail)) = path.split_first() else {
-        return value.is_table();
+        return value.as_table().is_some_and(|table| !table.is_empty());
     };
     value
         .get(*head)
-        .is_some_and(|nested| has_toml_table(nested, tail))
+        .is_some_and(|nested| has_nonempty_toml_table(nested, tail))
 }
 
 fn resolve_manifest_runtime_version(

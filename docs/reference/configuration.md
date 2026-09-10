@@ -3,16 +3,12 @@
 conda-ship reads project intent from a conda-compatible manifest and concrete
 package records from the matching lockfile.
 
-The preferred manifest is `conda.toml` with `conda.lock`. `pyproject.toml` with
-`[tool.conda]` also uses `conda.lock`. `pixi.toml` with `pixi.lock` and
-`pyproject.toml` with `[tool.pixi]` plus `pixi.lock` remain supported for
-Pixi-compatible workflows.
-
 Downstream distributions maintain these values in their own project manifest.
 conda-ship treats the values as build input. It does not define a universal
 conda distribution.
 
-`cs inspect`, `cs build`, and `cs run` can read either manifest/lockfile pair.
+`cs inspect`, `cs build`, and `cs run` can read the supported manifest and
+lockfile pairs.
 Packaged builds find the installed runtime template automatically, so local
 projects do not need a conda-ship source checkout.
 
@@ -22,7 +18,8 @@ conda-ship looks in the build root for:
 
 1. `conda.toml`
 2. `pixi.toml`
-3. `pyproject.toml` when it contains `[tool.conda]` or `[tool.pixi]`
+3. `pyproject.toml` with a nonempty `[tool.conda.workspace]` or
+   `[tool.pixi.workspace]` table
 
 The selected manifest determines the lockfile:
 
@@ -30,12 +27,14 @@ The selected manifest determines the lockfile:
 | --- | --- |
 | `conda.toml` | `conda.lock` |
 | `pixi.toml` | `pixi.lock` |
-| `pyproject.toml` with `[tool.conda]` | `conda.lock` |
-| `pyproject.toml` with `[tool.pixi]` | `pixi.lock` |
+| `pyproject.toml` with nonempty `[tool.conda.workspace]` | `conda.lock` |
+| `pyproject.toml` with nonempty `[tool.pixi.workspace]` | `pixi.lock` |
 
-When `pyproject.toml` contains both `[tool.conda]` and `[tool.pixi]`,
-conda-ship follows conda-workspaces and treats `[tool.conda]` as the selected
-manifest.
+When both workspace tables are nonempty, `[tool.conda.workspace]` takes
+precedence. An empty `[tool.conda.workspace]` or a `[tool.conda]` table without
+workspace settings does not override a nonempty `[tool.pixi.workspace]`.
+`[tool.conda-ship]` is separate build policy and does not make `pyproject.toml`
+a source manifest on its own.
 
 `conda.lock` and `pixi.lock` are source lockfiles owned by their respective
 workspace tools. conda-ship derives a runtime lock from that source lockfile
@@ -44,8 +43,14 @@ while inspecting, building, or smoke-testing a runtime.
 ## Source Environment
 
 The selected source environment determines the conda packages available to the
-generated runtime. In `conda.toml` or `pixi.toml`, use a dedicated `ship`
-environment for the packages that should be included in the runtime:
+generated runtime. Only conda packages are supported. Locked PyPI packages in
+that environment, on any platform, cause an `unsupported_pypi_packages`
+diagnostic. Other environments in the source lockfile may contain PyPI packages.
+Use conda packages for runtime dependencies, or select a dedicated environment
+without PyPI packages and refresh the lockfile.
+
+In `conda.toml` or `pixi.toml`, use a dedicated `ship` environment for the
+packages that should be included in the runtime:
 
 ```toml
 [feature.ship.dependencies]

@@ -20,6 +20,7 @@ pub(crate) enum DiagnosticKind {
     RuntimeTemplateIncompatible,
     RuntimeTemplateStamped,
     SourceEnvironmentNotFound,
+    UnsupportedPypiPackages,
     Unknown,
 }
 
@@ -42,6 +43,7 @@ impl DiagnosticKind {
             Self::RuntimeTemplateIncompatible => "runtime_template_incompatible",
             Self::RuntimeTemplateStamped => "runtime_template_stamped",
             Self::SourceEnvironmentNotFound => "source_environment_not_found",
+            Self::UnsupportedPypiPackages => "unsupported_pypi_packages",
             Self::Unknown => "unknown",
         }
     }

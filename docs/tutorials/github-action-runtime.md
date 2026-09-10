@@ -14,8 +14,8 @@ pair:
 
 - `conda.toml` and `conda.lock`
 - `pixi.toml` and `pixi.lock`
-- `pyproject.toml` with `[tool.conda]` and `conda.lock`
-- `pyproject.toml` with `[tool.pixi]` and `pixi.lock`
+- `pyproject.toml` with nonempty `[tool.conda.workspace]` and `conda.lock`
+- `pyproject.toml` with nonempty `[tool.pixi.workspace]` and `pixi.lock`
 
 The manifest must contain `[tool.conda-ship]` with at least:
 

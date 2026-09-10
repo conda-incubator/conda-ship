@@ -51,7 +51,7 @@ conda workspace lock
 cs inspect
 ```
 
-Use this for `conda.toml` and `pyproject.toml` with `[tool.conda]`.
+Use this for `conda.toml` and `pyproject.toml` with nonempty `[tool.conda.workspace]`.
 :::
 
 :::{tab-item} Pixi
@@ -61,7 +61,7 @@ pixi lock
 cs inspect
 ```
 
-Use this for `pixi.toml` and `pyproject.toml` with `[tool.pixi]`.
+Use this for `pixi.toml` and `pyproject.toml` with nonempty `[tool.pixi.workspace]`.
 :::
 
 ::::

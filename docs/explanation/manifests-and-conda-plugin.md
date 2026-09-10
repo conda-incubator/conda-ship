@@ -7,24 +7,15 @@ and turns it into runtimes.
 
 ## Manifest Priority
 
-conda-ship treats {external+conda-workspaces:doc}`conda.toml <reference/conda-toml-spec>`
-as the preferred project manifest. The conda-workspaces `pyproject.toml`
-embedded form with `[tool.conda]` is also supported. `pixi.toml` and
-`pyproject.toml` with `[tool.pixi]` are supported when a downstream project
-already keeps its conda solve in Pixi.
+conda-ship looks for `conda.toml`, then `pixi.toml`, then a supported
+`pyproject.toml` in the build root. The embedded `pyproject.toml` form requires
+a nonempty `[tool.conda.workspace]` or `[tool.pixi.workspace]` table.
 
-Inside a build root, conda-ship looks for manifests in this order:
-
-1. `conda.toml`
-2. `pixi.toml`
-3. `pyproject.toml` when it contains `[tool.conda]` or `[tool.pixi]`
-
-When `conda.toml` is selected, conda-ship reads package records from `conda.lock`.
-When `pyproject.toml` with `[tool.conda]` is selected, it also reads package
-records from `conda.lock`. When `pixi.toml` or `pyproject.toml` with
-`[tool.pixi]` is selected, it reads package records from `pixi.lock`.
-If a `pyproject.toml` contains both `[tool.conda]` and `[tool.pixi]`,
-`[tool.conda]` wins.
+A nonempty `[tool.conda.workspace]` takes precedence when both are present.
+Otherwise, a nonempty `[tool.pixi.workspace]` selects Pixi input, even if
+`[tool.conda]` contains other settings. Conda-workspaces input uses `conda.lock`,
+and Pixi input uses `pixi.lock`. See {doc}`../reference/configuration` for the
+supported pairs.
 
 The lockfile remains the source of concrete package records. If the selected
 lockfile is missing, create it with the tool that owns the manifest, then run
@@ -97,7 +88,8 @@ For conda-workspaces projects that keep conda config in `pyproject.toml`, use
 `[tool.conda.feature.ship.dependencies]`. For Pixi projects, use Pixi's
 `[tool.pixi.*]` table names, such as `[tool.pixi.workspace]` and
 `[tool.pixi.feature.ship.dependencies]`. `[tool.conda-ship]` remains a separate
-tool table because it configures conda-ship, not the workspace solver.
+tool table because it configures conda-ship. A `pyproject.toml` containing only
+that table is not a supported source manifest.
 
 ## CLI Entry Points
 

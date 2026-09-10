@@ -30,7 +30,8 @@ source-environment = "ship"
 
 Then it:
 
-1. selects that solved environment from the source lock
+1. selects that solved environment from the source lock and rejects locked
+   PyPI packages
 2. copies the concrete conda package records into a new lock
 3. applies `[tool.conda-ship].exclude-packages`
 4. validates the required runtime packages
@@ -38,6 +39,10 @@ Then it:
 6. writes `dist/RUNTIME.runtime.lock`
 7. writes `dist/RUNTIME.cdx.json` from the target platform's resolved package
    graph
+
+conda-ship installs conda packages during bootstrap. It rejects PyPI packages in
+the selected environment instead of producing an incomplete runtime lock.
+PyPI packages in unselected environments do not prevent a build.
 
 The runtime lock is the lock the generated runtime uses during bootstrap.
 
@@ -73,7 +78,7 @@ source manifest or source lockfile, then rebuild.
 ## Flow
 
 ```text
-conda.toml / pixi.toml
+conda.toml / pixi.toml / pyproject.toml
         |
         | solved by conda-workspaces or Pixi
         v

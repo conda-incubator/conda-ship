@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import textwrap
-from typing import TYPE_CHECKING
 
+import pytest
 from conda_ship import project_metadata
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def test_runtime_version_args_ignores_non_build_commands(tmp_path) -> None:
@@ -93,6 +90,43 @@ def test_project_discovery_prefers_conda_toml(tmp_path) -> None:
     (tmp_path / "pixi.toml").write_text("", encoding="utf-8")
 
     project = project_metadata.CondaShipProject.from_root(tmp_path)
+
+    assert project is not None
+    assert project.manifest_path == tmp_path / "conda.toml"
+
+
+@pytest.mark.parametrize("namespace", ["conda", "pixi"])
+def test_project_discovery_accepts_embedded_workspace(tmp_path, namespace) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        f'[tool.{namespace}.workspace]\nname = "demo"\n', encoding="utf-8"
+    )
+
+    project = project_metadata.CondaShipProject.discover(tmp_path)
+
+    assert project is not None
+    assert project.manifest_path == tmp_path / "pyproject.toml"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        "[tool.conda]\n",
+        "[tool.conda.workspace]\n",
+        '[tool.conda.dependencies]\npython = "*"\n',
+        '[tool.conda]\nworkspace = "invalid"\n',
+        "[tool.pixi]\n",
+        "[tool.pixi.workspace]\n",
+        '[tool.pixi.dependencies]\npython = "*"\n',
+        '[tool.pixi]\nworkspace = "invalid"\n',
+    ],
+)
+def test_project_discovery_skips_pyproject_without_workspace(tmp_path, config) -> None:
+    (tmp_path / "conda.toml").write_text("", encoding="utf-8")
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "pyproject.toml").write_text(config, encoding="utf-8")
+
+    project = project_metadata.CondaShipProject.discover(nested)
 
     assert project is not None
     assert project.manifest_path == tmp_path / "conda.toml"

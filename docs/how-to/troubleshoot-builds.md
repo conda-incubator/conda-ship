@@ -26,6 +26,10 @@ Fix:
 - pass `--root PATH`, or
 - set the GitHub Action `root` input.
 
+For `pyproject.toml`, add a nonempty `[tool.conda.workspace]` or
+`[tool.pixi.workspace]` table. `[tool.conda-ship]` alone is build policy and does
+not define the source workspace. See {doc}`../reference/configuration`.
+
 ## Lockfile Not Found
 
 Error shape:
