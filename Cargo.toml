@@ -4,7 +4,7 @@ default-members = ["."]
 
 [package]
 name = "conda-ship"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2024"
 description = "Build ready-to-run conda runtimes"
 license = "BSD-3-Clause"
