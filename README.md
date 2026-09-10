@@ -256,7 +256,9 @@ pixi run docs
 ```
 
 `pixi run lint` runs the repository's `prek` hooks, including Rust formatting
-and clippy checks.
+and clippy checks. See the
+[contributor coverage commands](https://conda-incubator.github.io/conda-ship/how-to/build-locally/#measure-test-coverage)
+for Rust and Python reports.
 
 The terminal demos are generated from `demos/*.tape` with
 [VHS](https://github.com/charmbracelet/vhs):

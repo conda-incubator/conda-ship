@@ -147,6 +147,37 @@ conda-express uses `cx` as its runtime name and can set
 `artifact-name = "cxz"` for a release artifact. A different distribution uses a
 different `[tool.conda-ship].runtime-name` value or the `--runtime-name` override.
 
+## Measure Test Coverage
+
+From a conda-ship source checkout, run:
+
+```bash
+pixi run coverage
+pixi run -e test coverage-python
+```
+
+The Rust task includes the runtime template and experimental Fleet API. It
+writes `target/coverage/rust.lcov`. The Python task measures branches and
+subprocesses, prints a report, and writes
+`target/coverage/python/coverage.xml`.
+
+To inspect Python coverage in a browser, render the data from the previous run:
+
+```bash
+pixi run -e test coverage-python-html
+```
+
+Open `target/coverage/python/html/index.html` to read the report. For Rust,
+`pixi run coverage-html` runs the tests and writes an HTML report to
+`target/llvm-cov/html/index.html`.
+
+Use uncovered code to identify missing behavior tests. These reports have no
+required percentage.
+
+On Unix, a runtime replaces itself with its delegate using `exec`. That can
+prevent LLVM coverage from saving the runtime's counters. Integration tests
+also check installed files, delegate output, and exit status directly.
+
 ## Run Release Checks
 
 Before publishing a conda-ship release, run the same local checks used for
