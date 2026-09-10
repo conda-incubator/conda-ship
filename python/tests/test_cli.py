@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
+import subprocess
+import sys
+import textwrap
 from typing import TYPE_CHECKING
 
 import pytest
@@ -306,3 +311,107 @@ def test_execute_returns_cs_status(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert execute(args) == 3
     assert calls == [["inspect"]]
+
+
+@pytest.mark.parametrize("returncode", [0, 17])
+def test_cli_module_preserves_arguments_environment_and_output(
+    returncode,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONDA_SHIP_EXECUTABLE", sys.executable)
+    monkeypatch.setenv("CONDA_SHIP_ERROR_FORMAT", "text")
+    monkeypatch.setenv("CONDA_SHIP_TEST_VALUE", "inherited")
+    diagnostic = json.dumps(
+        {
+            "schema_version": 1,
+            "tool": "cs",
+            "kind": "missing_lockfile",
+            "message": "lockfile not found",
+            "hint": "run pixi lock",
+        }
+    )
+    script = textwrap.dedent(
+        f"""
+        import json
+        import os
+        import sys
+
+        print(json.dumps({{
+            "args": sys.argv[1:],
+            "format": os.environ["CONDA_SHIP_ERROR_FORMAT"],
+            "inherited": os.environ["CONDA_SHIP_TEST_VALUE"],
+        }}))
+        sys.stderr.write("checking project\\n" + {diagnostic!r} + "\\n")
+        sys.exit({returncode})
+        """
+    )
+    forwarded = ["value with spaces", "--name=two words", "--", "-x", ""]
+
+    result = subprocess.run(
+        [sys.executable, "-m", "conda_ship.cli", "--", "-c", script, *forwarded],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert result.returncode == returncode
+    assert json.loads(result.stdout) == {
+        "args": forwarded,
+        "format": "json",
+        "inherited": "inherited",
+    }
+    expected = "conda-ship: lockfile not found\nhint: run pixi lock" if returncode else diagnostic
+    assert result.stderr == f"checking project\n{expected}\n"
+
+
+@pytest.mark.parametrize(
+    ("diagnostic", "expected"),
+    [
+        ([], "[]"),
+        ({"schema_version": 2, "tool": "cs"}, None),
+        ({"schema_version": 1, "tool": "another-tool"}, None),
+        ({"kind": 3, "message": "failure"}, None),
+        ({"kind": "failure", "message": []}, None),
+        ({"kind": "failure", "message": "failure", "hint": []}, None),
+        ({"kind": "failure", "message": "failure"}, "conda-ship: failure\n"),
+    ],
+)
+def test_run_cs_handles_diagnostic_variants(
+    diagnostic,
+    expected,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    if isinstance(diagnostic, dict):
+        diagnostic = {"schema_version": 1, "tool": "cs", **diagnostic}
+    stderr = json.dumps(diagnostic)
+
+    status = run_cs(
+        ["-c", "import sys\nsys.stderr.write(sys.argv[1])\nsys.exit(1)", stderr],
+        executable=sys.executable,
+    )
+
+    assert status == 1
+    assert capsys.readouterr().err == (stderr if expected is None else expected)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX signal exit status")
+def test_run_cs_normalizes_real_signal_exit() -> None:
+    status = run_cs(
+        ["-c", "import os\nimport signal\nos.kill(os.getpid(), signal.SIGTERM)"],
+        executable=sys.executable,
+    )
+
+    assert status == 128 + signal.SIGTERM
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX executable permissions")
+def test_run_cs_rejects_nonexecutable_file(tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
+    cs = tmp_path / "cs"
+    cs.write_text("", encoding="utf-8")
+    cs.chmod(0o644)
+
+    assert run_cs([], executable=str(cs)) == 126
+    assert "file that is not executable" in capsys.readouterr().err

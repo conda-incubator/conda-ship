@@ -226,8 +226,11 @@ jobs:
 
       - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
 
-      - name: Generate coverage
-        run: pixi run coverage
+      - name: Generate Rust coverage
+        run: pixi run --locked coverage
+
+      - name: Generate Python coverage
+        run: pixi run --locked -e test coverage-python
 
       - name: Check Codecov token
         id: codecov-token
@@ -247,7 +250,7 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          files: lcov.info
+          files: target/coverage/rust.lcov,target/coverage/python/coverage.xml
           fail_ci_if_error: true
 
   python:

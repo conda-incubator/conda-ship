@@ -1,4 +1,4 @@
-//! End-to-end coverage for adapting a stamped runtime artifact to Fleet.
+//! End-to-end coverage for offline bootstrap and Fleet adaptation.
 #![cfg(all(feature = "runtime-template", feature = "fleet"))]
 
 use std::fs::File;
@@ -208,4 +208,67 @@ fn test_stamped_runtime_installs_through_fleet() {
                 "Build ready-to-run conda runtimes",
             ));
     });
+}
+
+#[test]
+fn test_stamped_runtime_bootstraps_from_offline_bundle_and_reuses_installation() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let (archive, sha256, size) = build_delegate_package(tmp.path());
+    write_project(&project, &archive, &sha256, size);
+    let out_dir = tmp.path().join("dist");
+    cargo_bin_cmd!("cs")
+        .arg("build")
+        .arg("--root")
+        .arg(&project)
+        .arg("--template")
+        .arg(cargo_bin!("cs-template"))
+        .arg("--out-dir")
+        .arg(&out_dir)
+        .assert()
+        .success();
+
+    let artifact = out_dir.join(format!("{RUNTIME_NAME}{}", std::env::consts::EXE_SUFFIX));
+    let prefix = tmp.path().join("prefix");
+    let cache = tmp.path().join("cache");
+    let mut command = assert_cmd::Command::new(&artifact);
+    command
+        .env("CONDA_SHIP_PREFIX", &prefix)
+        .env("FLEET_E2E_BUNDLE", tmp.path())
+        .env("FLEET_E2E_OFFLINE", "1")
+        .env("RATTLER_CACHE_DIR", &cache)
+        .arg("--help")
+        .timeout(Duration::from_secs(120));
+    command.assert().success().stdout(predicate::str::contains(
+        "Build ready-to-run conda runtimes",
+    ));
+
+    let delegate = if cfg!(windows) {
+        prefix.join(format!("{DELEGATE_NAME}.exe"))
+    } else {
+        prefix.join("bin").join(DELEGATE_NAME)
+    };
+    assert!(delegate.is_file());
+    let metadata_path = prefix.join(format!(".{RUNTIME_NAME}.json"));
+    let metadata_bytes = std::fs::read(&metadata_path).unwrap();
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes).unwrap();
+    assert_eq!(metadata["display_name"], RUNTIME_NAME);
+    assert_eq!(metadata["delegate_executable"], DELEGATE_NAME);
+    assert_eq!(metadata["packages"], serde_json::json!([DELEGATE_NAME]));
+    let history_path = prefix.join("conda-meta").join("history");
+    let history = std::fs::read(&history_path).unwrap();
+    assert!(!prefix.join(".conda-ship-bootstrap.json").exists());
+    assert_policy(&prefix);
+
+    std::fs::remove_file(&archive).unwrap();
+    std::fs::remove_dir_all(&cache).unwrap();
+
+    command.assert().success().stdout(predicate::str::contains(
+        "Build ready-to-run conda runtimes",
+    ));
+    assert_eq!(std::fs::read(metadata_path).unwrap(), metadata_bytes);
+    assert_eq!(std::fs::read(history_path).unwrap(), history);
+    assert!(!cache.exists());
+    assert_policy(&prefix);
 }

@@ -190,3 +190,180 @@ async fn download_and_bundle(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{BufRead, BufReader, Read};
+    use std::net::TcpListener;
+
+    use rstest::rstest;
+    use tempfile::TempDir;
+
+    const PACKAGE_NAME: &str = "demo-1.0-0.conda";
+    const PACKAGE_BYTES: &[u8] = b"locked package contents";
+
+    fn serve_package(status: &'static str) -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let server = std::thread::spawn(move || {
+            let start = std::time::Instant::now();
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(start.elapsed() < Duration::from_secs(10), "no request");
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("package server failed: {error}"),
+                }
+            };
+            stream.set_nonblocking(false).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            stream
+                .set_write_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let mut reader = BufReader::new(&mut stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            assert!(line.starts_with(&format!("GET /linux-64/{PACKAGE_NAME} ")));
+            loop {
+                line.clear();
+                assert_ne!(reader.read_line(&mut line).unwrap(), 0);
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                PACKAGE_BYTES.len()
+            )
+            .unwrap();
+            stream.write_all(PACKAGE_BYTES).unwrap();
+        });
+        (format!("http://{address}/linux-64/{PACKAGE_NAME}"), server)
+    }
+
+    fn package_lock(url: &str, contents: &[u8]) -> LockFile {
+        let sha256 = crate::hash::hex(&crate::hash::digest_to_array(sha2::Sha256::digest(
+            contents,
+        )));
+        LockFile::from_str_with_base_directory(
+            &format!(
+                "version: 6\nenvironments:\n  default:\n    channels: []\n    packages:\n      linux-64:\n        - conda: {url}\npackages:\n  - conda: {url}\n    sha256: {sha256}\n"
+            ),
+            None,
+        )
+        .unwrap()
+    }
+
+    fn assert_bundle_contents(bundle: &Path) {
+        let decoder = zstd::Decoder::new(std::fs::File::open(bundle).unwrap()).unwrap();
+        let mut archive = tar::Archive::new(decoder);
+        let mut entries = archive.entries().unwrap();
+        let mut entry = entries.next().unwrap().unwrap();
+        assert_eq!(entry.path().unwrap(), Path::new(PACKAGE_NAME));
+        let mut contents = Vec::new();
+        entry.read_to_end(&mut contents).unwrap();
+        assert_eq!(contents, PACKAGE_BYTES);
+        assert!(entries.next().is_none());
+    }
+
+    #[rstest]
+    fn test_bundle_contains_verified_download_and_removes_stale_contents(
+        #[values(false, true)] stale_directory: bool,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let bundle_dir = tmp.path().join("bundle");
+        if stale_directory {
+            std::fs::create_dir(&bundle_dir).unwrap();
+            std::fs::write(bundle_dir.join("obsolete-1.0-0.conda"), b"old package").unwrap();
+        } else {
+            std::fs::write(&bundle_dir, b"stale file").unwrap();
+        }
+        let bundle = tmp.path().join("bundle.tar.zst");
+        let (url, server) = serve_package("200 OK");
+        let lock = package_lock(&url, PACKAGE_BYTES);
+
+        let result = gen_bundle_from_lock(
+            &lock,
+            &tmp.path().join("runtime.lock"),
+            Platform::Linux64,
+            &bundle,
+        );
+        server.join().unwrap();
+
+        assert_eq!(result.unwrap(), bundle);
+        assert_eq!(std::fs::read_dir(&bundle_dir).unwrap().count(), 1);
+        assert_bundle_contents(&bundle);
+    }
+
+    #[rstest]
+    #[case::http_error("503 Service Unavailable", PACKAGE_BYTES, "HTTP 503")]
+    #[case::checksum_mismatch("200 OK", b"different locked contents", "SHA256 mismatch")]
+    fn test_failed_download_preserves_completed_bundle(
+        #[case] status: &'static str,
+        #[case] locked_contents: &[u8],
+        #[case] expected: &str,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let bundle = tmp.path().join("bundle.tar.zst");
+        std::fs::write(&bundle, b"previous completed bundle").unwrap();
+        let (url, server) = serve_package(status);
+        let lock = package_lock(&url, locked_contents);
+
+        let result = gen_bundle_from_lock(
+            &lock,
+            &tmp.path().join("runtime.lock"),
+            Platform::Linux64,
+            &bundle,
+        );
+        server.join().unwrap();
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains(expected), "{error}");
+        assert_eq!(
+            std::fs::read(&bundle).unwrap(),
+            b"previous completed bundle"
+        );
+        assert_eq!(
+            std::fs::read_dir(tmp.path().join("bundle"))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_bundle_replaces_a_stale_symlink_without_modifying_its_target() {
+        let tmp = TempDir::new().unwrap();
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        let retained = outside.join("retained");
+        std::fs::write(&retained, b"unrelated data").unwrap();
+        let bundle_dir = tmp.path().join("bundle");
+        std::os::unix::fs::symlink(&outside, &bundle_dir).unwrap();
+        let bundle = tmp.path().join("bundle.tar.zst");
+        let (url, server) = serve_package("200 OK");
+        let lock = package_lock(&url, PACKAGE_BYTES);
+
+        let result = gen_bundle_from_lock(
+            &lock,
+            &tmp.path().join("runtime.lock"),
+            Platform::Linux64,
+            &bundle,
+        );
+        server.join().unwrap();
+
+        result.unwrap();
+        assert!(!std::fs::symlink_metadata(&bundle_dir).unwrap().is_symlink());
+        assert_eq!(std::fs::read(&retained).unwrap(), b"unrelated data");
+        assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 1);
+        assert_bundle_contents(&bundle);
+    }
+}

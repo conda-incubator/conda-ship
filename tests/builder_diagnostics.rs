@@ -84,29 +84,29 @@ packages:
 #[case::other_platform("other-platform")]
 fn test_cs_rejects_pypi_packages_in_selected_environment(
     #[case] source_environment: &str,
-    #[values("inspect", "build")] command: &str,
+    #[values(
+        &["inspect", "--json"][..],
+        &["build", "--dry-run"][..],
+        &["build"][..],
+        &["run"][..]
+    )]
+    args: &[&str],
 ) {
     let tmp = project_with_pypi_packages(source_environment);
     let original_lock = std::fs::read(tmp.path().join("pixi.lock")).unwrap();
     let mut cmd = cargo_bin_cmd!("cs");
-    cmd.env("CONDA_SHIP_ERROR_FORMAT", "json").args([
-        command,
+    cmd.env("CONDA_SHIP_ERROR_FORMAT", "json").args(args).args([
         "--root",
         tmp.path().to_str().unwrap(),
         "--platform",
         "linux-64",
     ]);
-    if command == "build" {
-        cmd.arg("--dry-run");
-    } else {
-        cmd.arg("--json");
-    }
 
     let assert = cmd.assert().failure().stdout(predicate::str::is_empty());
     let diagnostic: serde_json::Value =
         serde_json::from_slice(&assert.get_output().stderr).unwrap();
 
-    assert_eq!(diagnostic["command"], command);
+    assert_eq!(diagnostic["command"], args[0]);
     assert_eq!(diagnostic["kind"], "unsupported_pypi_packages");
     assert_eq!(
         diagnostic["message"],
