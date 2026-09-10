@@ -47,6 +47,23 @@ strip = true
 testpaths = ["python/tests"]
 addopts = "-ra"
 
+[tool.coverage.run]
+branch = true
+source = ["conda_ship"]
+parallel = true
+patch = ["subprocess"]
+relative_files = true
+data_file = "target/coverage/python/.coverage"
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.coverage.xml]
+output = "target/coverage/python/coverage.xml"
+
+[tool.coverage.html]
+directory = "target/coverage/python/html"
+
 [tool.ruff]
 line-length = 99
 target-version = "py310"

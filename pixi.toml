@@ -35,8 +35,8 @@ build-debug = "cargo build --bin cs"
 check-lock = "cargo run -p conda-ship -- inspect --json > /dev/null"
 test = "cargo test --release --features runtime-template,fleet"
 test-all = "cargo test --release --features runtime-template,fleet,online_tests"
-coverage = "cargo llvm-cov --features runtime-template --lcov --output-path lcov.info"
-coverage-html = "cargo llvm-cov --features runtime-template --html"
+coverage = "mkdir -p target/coverage && cargo llvm-cov --locked --features runtime-template,fleet --lcov --output-path target/coverage/rust.lcov"
+coverage-html = "cargo llvm-cov --locked --features runtime-template,fleet --html"
 fmt-check = "cargo fmt --check"
 clippy = "cargo clippy --all-targets --features runtime-template,fleet -- -D warnings"
 demos = { cmd = """bash -c 'if [ -n "$1" ]; then vhs "demos/$1.tape"; else for tape in demos/*.tape; do [[ "$(basename "$tape")" == _* ]] && continue; vhs "$tape"; done; fi' -- {{ name }}""", args = [{ arg = "name", default = "" }], description = "Record demo GIFs" }
@@ -89,6 +89,7 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 python = ">=3.12"
 python-build = ">=1.2"
 conda = ">=25.1"
+coverage = ">=7.10.6"
 maturin = ">=1.0,<2.0"
 pytest = ">=8.0"
 ruff = ">=0.15"
@@ -99,6 +100,8 @@ conda-ship = { path = ".", editable = true }
 
 [feature.test.tasks]
 pytest = "python -m pytest python/tests"
+coverage-python = "python -m coverage erase && python -m coverage run -m pytest python/tests && python -m coverage combine && python -m coverage xml && python -m coverage report"
+coverage-python-html = "python -m coverage html"
 ruff-check = "ruff check python tests/ci pyproject.toml"
 ruff-format-check = "ruff format --check python tests/ci pyproject.toml"
 

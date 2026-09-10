@@ -241,6 +241,7 @@ pub(crate) fn validate_identity_for(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
     use tempfile::TempDir;
 
     #[test]
@@ -300,5 +301,81 @@ mod tests {
 
         assert!(!path(tmp.path()).exists());
         assert!(!temporary_path(tmp.path()).exists());
+    }
+
+    #[rstest]
+    fn test_marker_directories_are_preserved(
+        #[values(BOOTSTRAP_STATE_FILE, BOOTSTRAP_STATE_TEMP_FILE)] marker_name: &str,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let marker = tmp.path().join(marker_name);
+        std::fs::create_dir(&marker).unwrap();
+        let retained = marker.join("retained");
+        std::fs::write(&retained, b"unrelated data").unwrap();
+
+        for result in [
+            read(tmp.path()).map(|_| ()),
+            write_installing(tmp.path()),
+            remove(tmp.path()),
+        ] {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("not a regular file")
+            );
+            assert_eq!(std::fs::read(&retained).unwrap(), b"unrelated data");
+        }
+    }
+
+    #[cfg(unix)]
+    #[rstest]
+    fn test_marker_symlinks_and_their_targets_are_preserved(
+        #[values(BOOTSTRAP_STATE_FILE, BOOTSTRAP_STATE_TEMP_FILE)] marker_name: &str,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let prefix = tmp.path().join("prefix");
+        std::fs::create_dir(&prefix).unwrap();
+        let target = tmp.path().join("external-state");
+        std::fs::write(&target, b"unrelated data").unwrap();
+        let marker = prefix.join(marker_name);
+        std::os::unix::fs::symlink(&target, &marker).unwrap();
+
+        for result in [
+            read(&prefix).map(|_| ()),
+            write_installing(&prefix),
+            remove(&prefix),
+        ] {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("not a regular file")
+            );
+            assert!(std::fs::symlink_metadata(&marker).unwrap().is_symlink());
+            assert_eq!(std::fs::read(&target).unwrap(), b"unrelated data");
+        }
+    }
+
+    #[test]
+    fn test_invalid_final_marker_does_not_fall_back_to_temporary_state() {
+        let tmp = TempDir::new().unwrap();
+        write_installing(tmp.path()).unwrap();
+        let valid_state = std::fs::read(path(tmp.path())).unwrap();
+        std::fs::write(temporary_path(tmp.path()), &valid_state).unwrap();
+        std::fs::write(path(tmp.path()), b"invalid state").unwrap();
+
+        let error = read(tmp.path()).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed to parse bootstrap state")
+        );
+        assert_eq!(std::fs::read(path(tmp.path())).unwrap(), b"invalid state");
+        assert_eq!(
+            std::fs::read(temporary_path(tmp.path())).unwrap(),
+            valid_state
+        );
     }
 }

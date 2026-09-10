@@ -10,13 +10,19 @@ def test_runtime_version_args_ignores_non_build_commands(tmp_path) -> None:
     assert project_metadata.runtime_version_args(["inspect"], cwd=tmp_path) == ["inspect"]
 
 
-def test_runtime_version_args_ignores_cli_version(tmp_path) -> None:
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["build", "--runtime-version", "1.2.3"],
+        ["build", "--runtime-version=1.2.3"],
+        ["build", "--help"],
+        ["run", "-h"],
+    ],
+)
+def test_runtime_version_args_ignores_cli_version_and_help(tmp_path, argv) -> None:
     write_project(tmp_path)
 
-    assert project_metadata.runtime_version_args(
-        ["build", "--runtime-version", "1.2.3"],
-        cwd=tmp_path,
-    ) == ["build", "--runtime-version", "1.2.3"]
+    assert project_metadata.runtime_version_args(argv, cwd=tmp_path) == argv
 
 
 def test_runtime_version_args_appends_build_version(
@@ -57,13 +63,18 @@ def test_runtime_version_args_inserts_run_version_before_separator(
     ]
 
 
+@pytest.mark.parametrize(
+    "root_args", [["--root", "project"], ["--root=project"], ["--root", "{project}"]]
+)
 def test_runtime_version_args_uses_root_override(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
+    root_args,
 ) -> None:
     project = tmp_path / "project"
     project.mkdir()
     write_project(project)
+    root_args = [arg.format(project=project) for arg in root_args]
     seen = []
 
     def fake_resolve(root):
@@ -73,9 +84,9 @@ def test_runtime_version_args_uses_root_override(
     monkeypatch.setattr(project_metadata, "resolve_project_metadata_version", fake_resolve)
 
     assert project_metadata.runtime_version_args(
-        ["build", "--root", str(project)],
+        ["build", *root_args],
         cwd=tmp_path,
-    ) == ["build", "--root", str(project), "--runtime-version", "2.3.4"]
+    ) == ["build", *root_args, "--runtime-version", "2.3.4"]
     assert seen == [project]
 
 
@@ -138,6 +149,7 @@ def test_metadata_version_reads_version_header() -> None:
         == "1.2.3"
     )
     assert project_metadata.metadata_version("Metadata-Version: 2.4\nName: demo\n\n") is None
+    assert project_metadata.metadata_version("Version:   \n\n") is None
 
 
 def test_resolve_project_metadata_version_uses_pep517_hook(tmp_path) -> None:
@@ -177,6 +189,84 @@ def test_resolve_project_metadata_version_uses_pep517_hook(tmp_path) -> None:
     )
 
     assert project_metadata.resolve_project_metadata_version(tmp_path) == "2.3.4"
+
+
+def test_resolve_project_metadata_version_requires_pyproject(tmp_path) -> None:
+    with pytest.raises(
+        project_metadata.ProjectMetadataError, match="pyproject.toml was not found"
+    ):
+        project_metadata.resolve_project_metadata_version(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("config", "message"),
+    [
+        ("build-backend = 42", "build-backend must be a string"),
+        ('backend-path = "backend"', "backend-path must be a list of strings"),
+        ("backend-path = [42]", "backend-path must be a list of strings"),
+    ],
+)
+def test_resolve_project_metadata_version_rejects_invalid_backend_config(
+    tmp_path, config, message
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(f"[build-system]\n{config}\n", encoding="utf-8")
+
+    with pytest.raises(project_metadata.ProjectMetadataError, match=message):
+        project_metadata.resolve_project_metadata_version(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("backend", "message"),
+    [
+        pytest.param("", "PEP 517 prepare_metadata_for_build_wheel failed", id="missing-hook"),
+        pytest.param(
+            "raise RuntimeError('broken backend')",
+            "PEP 517 prepare_metadata_for_build_wheel failed",
+            id="backend-error",
+        ),
+        pytest.param("return ''", "invalid dist-info directory", id="empty-directory"),
+        pytest.param(
+            "return '../outside.dist-info'",
+            "invalid dist-info directory",
+            id="parent-directory",
+        ),
+        pytest.param(
+            r"return 'nested\\metadata.dist-info'",
+            "invalid dist-info directory",
+            id="windows-directory",
+        ),
+        pytest.param("return 'missing.dist-info'", "failed to read", id="missing-metadata"),
+        pytest.param(
+            """
+            from pathlib import Path
+            path = Path(metadata_directory, "demo.dist-info")
+            path.mkdir()
+            (path / "METADATA").write_text("Name: demo\\n", encoding="utf-8")
+            return path.name
+            """,
+            "project metadata does not contain a Version field",
+            id="missing-version",
+        ),
+    ],
+)
+def test_resolve_project_metadata_version_reports_backend_failures(
+    tmp_path, backend, message
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[build-system]\nrequires = []\nbuild-backend = "demo_backend"\nbackend-path = ["."]\n',
+        encoding="utf-8",
+    )
+    source = ""
+    if backend:
+        source = (
+            "def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):\n"
+            + textwrap.indent(textwrap.dedent(backend).strip(), "    ")
+            + "\n"
+        )
+    (tmp_path / "demo_backend.py").write_text(source, encoding="utf-8")
+
+    with pytest.raises(project_metadata.ProjectMetadataError, match=message):
+        project_metadata.resolve_project_metadata_version(tmp_path)
 
 
 def write_project(tmp_path, *, runtime_version: str = '{ from = "project-metadata" }') -> None:

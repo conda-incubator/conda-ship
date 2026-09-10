@@ -891,4 +891,66 @@ mod tests {
             "unexpected error: {err:?}"
         );
     }
+
+    fn bundle_lockfile(package_bytes: &[u8]) -> String {
+        let platform = Platform::current();
+        let (digest, _) = crate::hash::sha256_reader(package_bytes).unwrap();
+        let sha256 = crate::hash::hex(&digest);
+        format!(
+            "version: 6\nenvironments:\n  default:\n    channels: []\n    packages:\n      {platform}:\n        - conda: https://example.invalid/{platform}/demo-1.0-0.conda\npackages:\n  - conda: https://example.invalid/{platform}/demo-1.0-0.conda\n    sha256: {sha256}\n"
+        )
+    }
+
+    #[tokio::test]
+    async fn test_offline_bundle_reports_missing_packages_without_creating_prefix() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let bundle = tmp.path().join("bundle");
+        let prefix = tmp.path().join("prefix");
+        std::fs::create_dir(&bundle).unwrap();
+
+        let error = from_lockfile_with_bundle_and_specs(
+            &prefix,
+            &bundle_lockfile(b"expected package"),
+            &[],
+            &bundle,
+            true,
+            false,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("offline mode: 1 package(s) not found in bundle")
+        );
+        assert!(error.to_string().contains("demo-1.0-0.conda"));
+        assert!(!prefix.exists());
+        assert_eq!(std::fs::read_dir(bundle).unwrap().count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_offline_bundle_rejects_tampering_before_creating_prefix() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let bundle = tmp.path().join("bundle");
+        let prefix = tmp.path().join("prefix");
+        std::fs::create_dir(&bundle).unwrap();
+        let package = bundle.join("demo-1.0-0.conda");
+        std::fs::write(&package, b"tampered package").unwrap();
+
+        let error = from_lockfile_with_bundle_and_specs(
+            &prefix,
+            &bundle_lockfile(b"expected package"),
+            &[],
+            &bundle,
+            true,
+            false,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(error.to_string().contains("SHA256 mismatch"));
+        assert!(!prefix.exists());
+        assert_eq!(std::fs::read(package).unwrap(), b"tampered package");
+    }
 }
