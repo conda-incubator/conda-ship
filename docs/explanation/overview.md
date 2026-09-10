@@ -1,12 +1,10 @@
 # Overview
 
-## Executive Summary
-
 conda-ship turns a solved conda environment into a ready-to-run runtime.
 It contains generic build and bootstrap code. It is not a distribution, an
 environment manager, or an installer generator.
 
-At a glance:
+The workflow is:
 
 - A downstream project uses conda-workspaces or Pixi to solve and commit its
   package records.
@@ -24,7 +22,7 @@ At a glance:
 flowchart TB
     subgraph downstream["Downstream project"]
         direction LR
-        intent["Package intent"] --> solver["Solver (e.g. Pixi, conda)"] --> source_lock["Source lock"]
+        intent["Packages and channels"] --> solver["conda-workspaces or Pixi"] --> source_lock["Source lock"]
         choices["Runtime and release choices"]
     end
 
@@ -47,8 +45,8 @@ flowchart TB
     artifacts --> runtime
 ```
 
-The rest of this section explains those boundaries and the data that moves
-through them.
+The following sections describe the builder, generated runtime, lockfile, and
+package bundle.
 
 ## Builder
 
@@ -81,20 +79,23 @@ filename. See the [configuration reference](../reference/configuration.md).
 Runtime
 : The executable conda-ship produces.
 
+Managed prefix
+: The directory where the runtime installs its conda environment.
+
 Delegate
 : The executable inside the managed prefix that receives every runtime
-  argument.
+  argument, such as `conda` or `python`.
 
 Artifact
 : A release file staged by the build.
 
 ## Runtime Template
 
-The generic runtime template is an internal binary target. It is not a
-first-party distribution. During a build, the builder copies that template
-under the runtime name and stamps it with the runtime name, delegate, install
-scheme, install name, metadata filename, environment variable names, runtime
-lock, and optional bundle. The stamped copy is the runtime.
+The generic runtime template, `cs-template`, contains the code for installing
+the environment and running the delegate. During a build, `cs` copies it and
+writes the runtime configuration, lockfile, and optional package bundle into
+that copy. The documentation calls this step **stamping**. The stamped copy is
+the runtime that users run.
 
 Released builds and packaged local builds use prebuilt template assets.
 
@@ -129,6 +130,6 @@ An embedded runtime automatically uses its bundled archives during first-run
 bootstrap. Its bundle can be overridden with the bundle environment variable
 derived from the runtime name when needed.
 
-The bundle format is intentionally narrow. conda-ship writes top-level `.conda`
-and `.tar.bz2` files, then verifies them against the lockfile at install time.
+A bundle contains top-level `.conda` and `.tar.bz2` files. The runtime verifies
+them against the lockfile at install time.
 Embedded bundles reject nested paths and links before extraction.

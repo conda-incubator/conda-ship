@@ -54,10 +54,9 @@ example, the `conda-home` scheme might resolve to
 `~/.conda/express-1.2.3-d8c9f2728aa278eb`.
 
 Changing the runtime version or lock selects a new prefix. conda-ship does not
-remove older prefixes automatically. The abbreviated digest is a deterministic
-location identifier, not an authorization or integrity boundary. Package
-integrity continues to rely on the hashes in the stamped runtime lock and the
-existing ownership checks.
+remove older prefixes automatically. The abbreviated digest chooses the
+install directory. The runtime still verifies package hashes against the
+runtime lock and checks prefix ownership before reusing the directory.
 
 The derived name identifies the inputs used for the initial installation. It
 does not prevent later package changes inside the prefix. Set
@@ -85,8 +84,8 @@ runtime:
 CONDA_SHIP_PREFIX=/tmp/demo demo info
 ```
 
-Other runtime names also accept the prefix environment variable derived from
-the runtime name:
+Runtime names other than `conda` also accept a prefix environment variable
+derived from the runtime name:
 
 ```bash
 DEMO_PREFIX=/tmp/demo demo info
@@ -158,7 +157,7 @@ to the package set originally shipped by the runtime.
 ## Executable Update Ownership
 
 Managed-prefix ownership and executable update ownership are separate. The
-prefix metadata file is the canonical persistent record for both. Its adjacent
+prefix metadata file stores both kinds of ownership. Its adjacent
 update lock coordinates processes but does not contain update state.
 
 `direct`

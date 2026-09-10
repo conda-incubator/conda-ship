@@ -7,7 +7,8 @@ runtimes.
 
 `CONDA_SHIP_TEMPLATE`
 : Path to a prebuilt generic runtime template. `cs build` uses this when
-  `--template` is not supplied and no installed template is found next to `cs`.
+  `--template` is not supplied. A nonempty value takes precedence over the
+  installed template next to `cs`. An invalid path causes an error.
 
 `CONDA_SHIP_EXECUTABLE`
 : Path used by the Python `conda ship` adapter to find the `cs` executable.
@@ -20,6 +21,11 @@ runtimes.
   to `json`, `cs` writes a single structured JSON diagnostic line for builder
   failures. The adapter parses that line and renders a normal conda-facing
   error. Users normally do not need to set this themselves.
+
+`SOURCE_DATE_EPOCH`
+: Unix timestamp in whole seconds used for the generated SBOM's creation time.
+  Use it for reproducible SBOM timestamps. When unset, the build records the
+  current UTC time. Invalid or unsupported timestamps cause a build error.
 
 ## Runtime Variables
 
@@ -47,12 +53,12 @@ Non-alphanumeric characters become underscores and letters are uppercased.
 `RUNTIME_OFFLINE`
 : Runtime-specific flag for offline bootstrap mode. For `demo`, the variable is
   `DEMO_OFFLINE`. Empty, `0`, and `false` disable the flag. Other non-empty
-  values enable it.
+  values enable it. The comparison with `false` is case-insensitive.
 
 ## Runtime Update Coordinator Variables
 
-These variables define the version-one child-process contract for downstream
-transaction coordinators. They are not normal user-facing runtime controls.
+These variables configure the version-one helper used by downstream
+transaction coordinators. They are intended for integration code.
 See {doc}`runtime-cli` for the required bootstrap, lock, and call sequence.
 
 `CONDA_SHIP_INTERNAL_UPDATE`
@@ -66,9 +72,9 @@ See {doc}`runtime-cli` for the required bootstrap, lock, and call sequence.
 
 `CONDA_SHIP_INTERNAL_UPDATE_OFFLINE`
 : Disable network access for update resolution and staging. Empty, `0`, and
-  `false` disable the flag. Other non-empty values enable it. An HTTPS update
-  requires previously cached repodata and package content in this mode. A
-  `file://` channel is read directly.
+  `false` disable the flag. The comparison with `false` is case-insensitive.
+  Other non-empty values enable it. An HTTPS update requires previously cached
+  repodata and package content in this mode. A `file://` channel is read directly.
 
 `CONDA_SHIP_INTERNAL_UPDATE_OWNERSHIP`
 : Installed executable ownership for `v1/record-installation`. Supported values

@@ -42,9 +42,9 @@ For the difference between `runtime-name` and `artifact-name`, see
 ## Runtime Update Packages
 
 `cs package-update` writes a dependency-free native `.conda` package from a
-finalized update-enabled `online` or `embedded` runtime. This is separate from
-`cs build` and does not add a file to the normal `dist/` set unless that
-directory is selected explicitly.
+finalized update-enabled `online` or `embedded` runtime. Run it separately
+after `cs build`. By default, it writes next to the `.info.json` passed through
+`--info`. Use `--out-dir` to write update packages to a separate directory.
 
 The package contains one executable payload plus normal conda package metadata:
 
@@ -120,7 +120,7 @@ Channel and remote download URLs are sanitized before they are written. URL
 credentials, Anaconda `/t/<token>` path segments, queries, and fragments are
 removed. Local paths and `file:` URLs are omitted.
 
-This mapping uses existing conda contracts for
+This mapping follows the conda specifications for
 [package identifiers](https://conda.org/learn/ceps/cep-0026/),
 [MatchSpecs](https://conda.org/learn/ceps/cep-0029/),
 [package metadata](https://conda.org/learn/ceps/cep-0034/), and
@@ -159,15 +159,14 @@ of complete product coverage or legal conformity.
 
 Conda package PURLs follow the current
 [package-url conda type](https://github.com/package-url/purl-spec/blob/main/docs/types/definitions/conda-definition.md).
-They are package-url identifiers, not an accepted conda CEP contract. License
-values are kept as named licenses because historical repodata does not
+License values are kept as named licenses because historical repodata does not
 guarantee a valid SPDX expression.
 
 conda-ship does not infer an SBOM author or product manufacturer from a channel
 or package record. Compliance profiles that require author, manufacturer, or
-contact metadata are outside the current output contract. Do not edit the
-staged SBOM in place because its checksum is recorded in `.info.json` and
-`.sha256`.
+contact metadata need additional information from the downstream project. Do
+not edit the staged SBOM in place because its checksum is recorded in
+`.info.json` and `.sha256`.
 
 `SOURCE_DATE_EPOCH` controls the SBOM timestamp when set. Otherwise the build
 time is recorded in UTC. Rebuild the SBOM whenever the runtime or package set

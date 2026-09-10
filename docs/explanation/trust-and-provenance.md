@@ -1,8 +1,7 @@
 # Trust And Provenance
 
-conda-ship has a narrow trust model. It verifies the inputs it consumes and the
-package archives it installs, but downstream distributions still own signing and
-release policy for their final artifacts.
+conda-ship verifies build inputs and package archives. Downstream distributions
+choose signing and release policy for their final artifacts.
 
 ## Build Tool Trust
 
@@ -156,7 +155,7 @@ Good places for downstream release controls include:
 Signing belongs downstream because one runtime can be distributed through
 several channels, and each channel has different trust requirements.
 GitHub release immutability is useful downstream too, but it is not a
-replacement for signing. It keeps a published asset set stable; attestations and
+replacement for signing. It keeps a published asset set stable. Attestations and
 signatures explain who produced that asset set and from which workflow.
 
 ## Authentication And Offline Updates
@@ -183,6 +182,6 @@ conda-ship does not:
 - replace review of committed source lockfiles
 - hide the need for package-manager or platform signing
 
-It provides lock-based package selection, narrow runtime verification, and
-metadata that downstream release systems can sign. Set `SOURCE_DATE_EPOCH` when
+It selects packages from a lockfile, checks package and runtime-data hashes,
+and writes metadata that downstream release systems can sign. Set `SOURCE_DATE_EPOCH` when
 reproducible SBOM timestamps are required.

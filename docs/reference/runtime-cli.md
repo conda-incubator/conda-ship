@@ -4,10 +4,10 @@ Every conda-ship artifact is a stamped copy of the generic runtime template. In
 this page, `RUNTIME` stands for the staged executable name and `DELEGATE`
 stands for the configured executable inside the managed prefix.
 
-The generated runtime does not expose a conda-ship CLI. It owns the bootstrap
-boundary needed to make the delegate available. When executable updates are
-configured, it also exposes a process-local helper for a downstream transaction
-coordinator. Normal command arguments still belong to the delegate.
+The generated runtime installs the managed prefix and runs the delegate.
+Normal command arguments belong to the delegate. When executable updates are
+configured, a downstream transaction coordinator can also invoke an update
+helper through environment variables.
 
 ## First Invocation
 
@@ -82,9 +82,8 @@ RUNTIME --version
 ```
 
 `RUNTIME info` is the normal status command for a conda delegate. If the
-distribution includes conda-spawn with the alias implemented by
-[conda-spawn PR #59](https://github.com/conda/conda-spawn/pull/59),
-`RUNTIME shell` uses the conda-spawn alias for `conda spawn`.
+distribution includes a conda-spawn version that provides `conda shell`,
+`RUNTIME shell` starts a shell through that plugin.
 
 Use `conda doctor` and its supported fixes to diagnose and repair an installed
 prefix. Use the commands supplied by conda-self for installer snapshots and
@@ -142,10 +141,10 @@ checks require cached repodata and offline staging requires the selected
 package content to be cached. A `file://` channel reads local repodata and
 packages directly.
 
-## Version-One Coordinator Contract
+## Version-One Coordinator API
 
-The helper is a compatibility contract for downstream transaction
-coordinators and installers. It is not a user-facing command. The coordinator
+The helper provides an API for downstream transaction coordinators and
+installers. The coordinator
 invokes the stamped executable as a child process with `CONDA_SHIP_PREFIX` set
 to the managed prefix when it needs to override the runtime's stamped install
 location.
@@ -287,8 +286,9 @@ write diagnostics to stderr and exit nonzero. Successful actions write one JSON
 object to stdout.
 
 Set `CONDA_SHIP_INTERNAL_UPDATE_OFFLINE=1` on check and stage to disable network
-access. Empty, `0`, and `false` leave network access enabled. This flag is
-separate from the runtime-specific bootstrap offline variable.
+access. Empty, `0`, and `false` leave network access enabled. The comparison
+with `false` is case-insensitive. This flag is separate from the
+runtime-specific bootstrap offline variable.
 
 All persistent update and recovery state remains inside the existing
 `.RUNTIME_NAME.json` prefix metadata file. The helper introduces no daemon,
@@ -327,7 +327,8 @@ For a runtime named `demo`, the variables are:
 
 `DEMO_OFFLINE`
 : Disable network access during bootstrap. Empty, `0`, and `false` disable the
-  flag. Other non-empty values enable it.
+  flag. Other non-empty values enable it. The comparison with `false` is
+  case-insensitive.
 
 Example:
 

@@ -2,31 +2,24 @@
 
 Build ready-to-run conda runtimes.
 
-`conda-ship` is a generic builder for single-binary conda runtimes. It
-installs the `cs` CLI, but it does not ship a first-party distribution.
-Downstream projects choose the runtime name, delegate executable, package set,
-channels, documentation URL, and release channel.
+`conda-ship` builds an executable from a locked conda environment. On first
+use, that executable installs the environment into a directory called the
+**managed prefix**, then runs the configured command, called the **delegate**.
+Later invocations reuse the installed environment.
+
+Use the `cs` CLI to build runtimes. Choose the runtime name, delegate, package
+set, channels, documentation URL, and release channel in your project.
 
 [conda-express](https://jezdez.github.io/conda-express/) is one downstream
 distribution maintained by Jannis Leidel: it uses conda-ship to build the `cx`
-and `cxz` runtimes. conda-ship owns the reusable builder; conda-express owns
-the product defaults and release channels for `cx`.
+and `cxz` runtimes. conda-express chooses their packages, settings, and release
+channels.
 
 ## Start Here
 
-If you are new to conda-ship, start with the quickstart. It creates a small
-conda workspace, locks it, and stages a `demo` runtime:
-
-```bash
-conda install --name base -c conda-forge conda-pypi
-conda create -n cs-demo -c conda-forge python pip conda-workspaces
-conda activate cs-demo
-conda pypi install conda-ship
-mkdir demo-runtime
-cd demo-runtime
-```
-
-Then follow the [quickstart](tutorials/quickstart.md).
+The [quickstart](tutorials/quickstart.md) installs the builder, creates and
+locks a small conda workspace, and builds a `demo` runtime. For an explanation
+of each step, follow the [first runtime tutorial](tutorials/first-runtime.md).
 
 ## Choose A Path
 
@@ -41,7 +34,7 @@ Then follow the [quickstart](tutorials/quickstart.md).
   [runtime and artifact names](reference/names.md) and
   [artifacts](reference/artifacts.md).
 - Unsure what belongs here versus downstream: read
-  [project boundaries](explanation/project-boundaries.md).
+  [project scope](explanation/project-boundaries.md).
 - Building an orchestrator for multiple locked runtimes: read
   [Fleet concepts](explanation/fleet.md) and the
   [Fleet API reference](reference/fleet.md).

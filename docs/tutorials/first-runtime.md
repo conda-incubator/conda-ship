@@ -82,8 +82,8 @@ Solve the source lockfile with conda-workspaces:
 conda workspace lock
 ```
 
-This writes `conda.lock`. conda-ship consumes the committed lockfile; it does
-not solve directly from loose package names during normal builds.
+This writes `conda.lock`. conda-ship reads the resolved package records from
+that file when it builds the runtime.
 
 ## Inspect The Package Set
 

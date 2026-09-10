@@ -74,7 +74,7 @@ jobs:
             installer: standalone
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
         id: cs
@@ -87,7 +87,7 @@ jobs:
         with:
           subject-path: ${{ steps.cs.outputs.dist-path }}/*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.cs.outputs.asset-name }}
           path: ${{ steps.cs.outputs.dist-path }}
@@ -160,12 +160,11 @@ for release-job metadata that may vary across a matrix:
 ```
 
 The action does not validate those values itself. It passes them to
-`cs build --dry-run`; invalid values fail in conda-ship before artifact files
+`cs build --dry-run`. Invalid values fail in conda-ship before artifact files
 are written.
 
 ## What You Learned
 
-You added a release-style workflow that builds conda-ship runtime artifacts from
-committed project input. The solve still belongs to conda-workspaces or Pixi;
-the action consumes the committed lockfile and stamps a runtime with
-release-specific metadata.
+The workflow builds runtime artifacts from the committed manifest and lockfile.
+Use conda-workspaces or Pixi to update those files when packages change. The
+action reads them and applies any runtime metadata overrides from the job.

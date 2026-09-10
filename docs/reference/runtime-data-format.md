@@ -1,8 +1,8 @@
 # Runtime Data Format
 
 conda-ship stamps runtime data onto a copy of the generic runtime template.
-This page documents the compatibility surface at a high level. It is not a
-general-purpose file format for other tools to write.
+This page describes the stored data and how runtimes read it. Only conda-ship
+should write this format.
 
 ```{important}
 Treat the stamped runtime data as private executable metadata. Release tooling
@@ -188,8 +188,8 @@ packages made from finalized 0.9.0 artifacts for later native updates.
 Use `.info.json`, `.runtime.lock`, `.packages.txt`, `.cdx.json`, and `.sha256`
 for release automation instead of parsing the runtime data block directly.
 
-The version-one update coordinator contract does not make the stamped runtime
-format public. A coordinator invokes the stamped executable as a child process
+The version-one update coordinator API does not expose the stored runtime
+format. A coordinator invokes the stamped executable as a child process
 and exchanges JSON through the environment-driven helper documented in
 {doc}`runtime-cli`.
 

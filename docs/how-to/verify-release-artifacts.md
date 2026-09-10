@@ -46,17 +46,18 @@ change.
 Every `cs build` writes a `.sha256` file next to the runtime and metadata:
 
 ```bash
-shasum -a 256 --check dist/demo.sha256
+(cd dist && shasum -a 256 --check demo.sha256)
 ```
 
 On Linux, `sha256sum` works too:
 
 ```bash
-sha256sum --check dist/demo.sha256
+(cd dist && sha256sum --check demo.sha256)
 ```
 
-The checksum file covers the staged runtime, runtime lock, package list,
-CycloneDX SBOM, info JSON, and external bundle when present.
+Run the check from the artifact directory because the checksum file records
+filenames relative to that directory. It covers the staged runtime, runtime
+lock, package list, CycloneDX SBOM, info JSON, and external bundle when present.
 
 ## Inspect Artifact Metadata
 

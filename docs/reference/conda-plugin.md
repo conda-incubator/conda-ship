@@ -11,9 +11,8 @@ conda ship inspect
 conda ship build
 ```
 
-`conda ship ...` runs the installed `cs` executable with the same
-arguments. It is not a separate builder and it does not make conda-ship part
-of conda itself.
+`conda ship ...` runs the installed `cs` executable. It forwards your arguments
+and can resolve a runtime version from Python project metadata.
 
 Packaged builds find the runtime template installed next to `cs`
 automatically. Source checkouts need an installed template, a
@@ -34,8 +33,8 @@ Packages must install these pieces into the same environment:
 - the Python `conda_ship` adapter package
 
 For custom packaging or tests, set `CONDA_SHIP_EXECUTABLE` to an explicit
-executable path. If that variable is set, it must point to a valid executable;
-the adapter fails instead of falling back to the packaged `cs`.
+executable path. An invalid value causes an error, even when a packaged `cs`
+is available.
 
 ## Argument Forwarding
 
@@ -61,6 +60,10 @@ When `[tool.conda-ship]` contains
 the version before invoking `cs build` or `cs run`. It calls the project's PEP
 517 `prepare_metadata_for_build_wheel` hook, reads `Version` from the generated
 wheel metadata, and forwards the concrete value as `--runtime-version`.
+
+The build backend must already be installed in the Python environment running
+`conda ship`. The adapter does not build a wheel if the metadata hook is
+unavailable.
 
 Direct `cs build` invocations do not run Python packaging hooks. Use
 `conda ship build` for this source, or pass `cs build --runtime-version VERSION`.

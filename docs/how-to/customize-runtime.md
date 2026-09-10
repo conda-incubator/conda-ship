@@ -4,10 +4,9 @@ Use this guide when you want a conda-ship-built runtime with your own package
 set, runtime name, delegate executable, install location, channels, or
 documentation URL.
 
-conda-ship is generic. It does not publish a first-party runtime, and it does
-not reserve a default runtime name. [conda-express](https://jezdez.github.io/conda-express/)
-is one downstream distribution that uses conda-ship to publish `cx` and `cxz`;
-use a runtime name owned by your distribution.
+Choose a runtime name for your distribution. For example,
+[conda-express](https://jezdez.github.io/conda-express/) uses conda-ship to
+publish `cx` and `cxz`.
 
 For exact field definitions and alternate manifest formats, see
 {doc}`../reference/configuration`.
@@ -32,9 +31,6 @@ differ from the base runtime identity:
 runtime-name = "demo"
 artifact-name = "demo-offline"
 ```
-
-Avoid publishing downstream builds as `cx` or `cxz`; those names identify the
-conda-express artifacts maintained in the `jezdez/conda-express` repository.
 
 ## Choose An Install Location
 
@@ -128,8 +124,8 @@ also preserves any frozen marker created by an installed package.
 
 ## Configure Build Input
 
-Keep package and channel intent in the manifest format owned by your workspace
-tool. Keep conda-ship build policy in `[tool.conda-ship]`.
+Define packages and channels in your workspace tool's manifest sections.
+Configure the runtime build in `[tool.conda-ship]`.
 
 For `conda.toml`, a minimal downstream runtime project looks like this:
 
@@ -189,7 +185,7 @@ For CI builds, commit the manifest and lockfile, then point the composite action
 at that project root:
 
 ```yaml
-- uses: actions/checkout@v4
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
 - uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
   id: cs

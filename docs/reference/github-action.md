@@ -14,9 +14,9 @@ verification uses `gh attestation verify`.
 The action builds only from committed project input. The selected root must
 contain a supported {doc}`manifest and lockfile pair <configuration>`.
 When the manifest or matching lockfile is missing, the action fails instead of
-generating or solving project configuration in CI. This minimal example assumes the manifest contains
-`[tool.conda-ship].runtime-name`,
-`[tool.conda-ship].delegate-executable`, and a downstream runtime version.
+generating or solving project configuration in CI. The example below requires
+`runtime-name`, `delegate-executable`, `source-environment`, and a runtime
+version in the manifest. See {doc}`configuration` for supported version sources.
 
 When the selected conda-ship config sets
 `runtime-version = { from = "project-metadata" }`, the action first lets
@@ -27,7 +27,7 @@ project version through `pypa/build`, and retries the build with an explicit
 inputs do not set up Python.
 
 ```yaml
-- uses: actions/checkout@v4
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
 - uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
   id: cs
@@ -38,29 +38,25 @@ inputs do not set up Python.
 ## Inputs
 
 `conda-ship-version`
-: conda-ship release version to download, such as `0.3.0`. Set this when the
+: conda-ship release version to download, such as `X.Y.Z`. Set this when the
   action source is pinned by full commit SHA. When omitted, the action uses the
   exact action tag if available.
 
 `runtime-name`
-: Runtime name override. Set this when the release job intentionally stamps a
-  different runtime name than `[tool.conda-ship].runtime-name`.
+: Override `[tool.conda-ship].runtime-name` for this build.
 
 `artifact-name`
 : Staged executable and artifact stem override. Set this when any layout should
   stage a different command and release artifact name than `runtime-name`, such
   as `cxz` for a distribution whose base runtime name is `cx`. When omitted,
-  artifacts use the resolved `runtime-name` exactly.
+  the manifest's `artifact-name` is used if set, otherwise the runtime name.
 
 `delegate-executable`
-: Delegate executable override. Set this when the release job intentionally
-  changes which executable receives runtime arguments.
+: Override `[tool.conda-ship].delegate-executable` for this build.
 
 `runtime-version`
-: Runtime version override. Set this when the release job intentionally stamps
-  a version different from `[tool.conda-ship].runtime-version` or
-  `[project].version`, or when the manifest does not provide a downstream
-  runtime version.
+: Override the runtime version for this build, including a version configured
+  in the manifest or resolved from project metadata.
 
 `python-version`
 : Python version used only when the action must resolve
