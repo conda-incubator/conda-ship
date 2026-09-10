@@ -2,6 +2,34 @@
 
 All notable changes to `conda-ship` are documented here.
 
+## 0.9.1 - 2026-09-10
+
+### Fixed
+
+- Aligned Rust and Python manifest discovery with populated
+  `[tool.conda.workspace]` and `[tool.pixi.workspace]` tables. Empty or partial
+  conda configuration no longer overrides a usable Pixi workspace.
+- Rejected PyPI packages in the selected source environment before building or
+  running a runtime. conda-ship cannot install those packages and previously
+  could produce an incomplete runtime. PyPI packages in other environments
+  remain allowed.
+- Updated the GitHub Action to verify release attestations after the repository
+  transfer, including releases signed under the previous owner.
+- Updated `chacha20` to 0.10.2, which fixes an SSE4.1 instruction used by its
+  SSE2 random-number generator. Earlier 0.10 releases were yanked upstream.
+
+### Changed
+
+- Moved the repository and documentation to `conda-incubator`. Downstream
+  workflows should use `conda-incubator/conda-ship`, pin the full 0.9.1 release
+  commit SHA, and set `conda-ship-version: "0.9.1"`.
+- Updated the object and Rattler dependencies and GitHub Actions.
+- Expanded coverage of downloads, bootstrap state, offline installation and
+  reuse, and Python subprocess behavior. Coverage reports now include the
+  Fleet API and Python branches and subprocesses.
+- Clarified runtime concepts and corrected documentation for executable lookup,
+  naming, external bundles, checksums, and update-package output locations.
+
 ## 0.9.0 - 2026-08-24
 
 > **Important:** 0.9.0 changes native macOS and Windows runtime compatibility.
