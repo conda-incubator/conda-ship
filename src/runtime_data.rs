@@ -34,17 +34,14 @@ const PE_READER_CAPABILITY_SECTION_NAME: [u8; pe::IMAGE_SIZEOF_SHORT_NAME] = *b"
 const MAX_HEADER_LEN: u64 = 16 * 1024 * 1024;
 const MAX_MACHO_LOAD_COMMAND_BYTES: usize = 1024 * 1024;
 const MACHO_SIGNATURE_ALIGNMENT: u64 = 16;
-const MACHO_LC_ATOM_INFO: u32 = 0x36;
-const MACHO_LC_FUNCTION_VARIANTS: u32 = 0x37;
-const MACHO_LC_FUNCTION_VARIANT_FIXUPS: u32 = 0x38;
-const MACHO_LC_LAZY_LOAD_DYLIB_INFO: u32 = 0x3a;
+const MACHO_LC_LAZY_LOAD_DYLIB_INFO: macho::LoadCommandType = macho::LoadCommandType(0x3a);
 const PE_CERTIFICATE_ALIGNMENT: u64 = 8;
 const MAX_PE_CERTIFICATE_ENTRIES: u64 = 1024;
 const MAX_PE_HEADER_BYTES: u64 = 16 * 1024 * 1024;
 const PE_MAX_IMAGE_SIZE: u64 = 2 * 1024 * 1024 * 1024;
 const PE_ANCHOR_SECTION_NAME: [u8; pe::IMAGE_SIZEOF_SHORT_NAME] = *b".cship\0\0";
-const PE_ANCHOR_SECTION_CHARACTERISTICS: u32 =
-    pe::IMAGE_SCN_CNT_INITIALIZED_DATA | pe::IMAGE_SCN_MEM_READ;
+const PE_ANCHOR_SECTION_CHARACTERISTICS: pe::SectionFlags =
+    pe::SectionFlags(pe::IMAGE_SCN_CNT_INITIALIZED_DATA.0 | pe::IMAGE_SCN_MEM_READ.0);
 
 const MACHO_HEADER_LEN: usize = std::mem::size_of::<MachHeader64<LittleEndian>>();
 const MACHO_CODE_SIGNATURE_LEN: usize = std::mem::size_of::<LinkeditDataCommand<LittleEndian>>();
@@ -577,7 +574,11 @@ enum BinaryFormat {
     Other,
 }
 
-fn validate_macho_platform(cpu_type: u32, cpu_subtype: u32, platform: &str) -> io::Result<()> {
+fn validate_macho_platform(
+    cpu_type: macho::CpuType,
+    cpu_subtype: macho::CpuSubtype,
+    platform: &str,
+) -> io::Result<()> {
     let (expected_type, expected_subtype) = match platform {
         "" => return Ok(()),
         "osx-64" => (macho::CPU_TYPE_X86_64, macho::CPU_SUBTYPE_X86_64_ALL),
@@ -588,7 +589,7 @@ fn validate_macho_platform(cpu_type: u32, cpu_subtype: u32, platform: &str) -> i
             )));
         }
     };
-    if cpu_type != expected_type || cpu_subtype != expected_subtype {
+    if cpu_type != expected_type || cpu_subtype != expected_subtype.into() {
         return Err(invalid_data(format!(
             "Mach-O runtime template CPU type {cpu_type:#x} with subtype {cpu_subtype:#x} does not match platform {platform}"
         )));
@@ -596,7 +597,7 @@ fn validate_macho_platform(cpu_type: u32, cpu_subtype: u32, platform: &str) -> i
     Ok(())
 }
 
-fn validate_pe_platform(machine: u16, kind: PeKind, platform: &str) -> io::Result<()> {
+fn validate_pe_platform(machine: pe::Machine, kind: PeKind, platform: &str) -> io::Result<()> {
     let (expected_machine, expected_kind) = match platform {
         "" => return Ok(()),
         "win-32" => (pe::IMAGE_FILE_MACHINE_I386, PeKind::Pe32),
@@ -743,7 +744,7 @@ struct PeCertificateLayout {
 #[derive(Debug)]
 struct PeImageLayout {
     kind: PeKind,
-    machine: u16,
+    machine: pe::Machine,
     file_header_offset: usize,
     optional_header_offset: usize,
     section_table_offset: usize,
@@ -798,8 +799,8 @@ where
     let file_header = nt_headers.file_header();
     let optional = nt_headers.optional_header();
     let characteristics = file_header.characteristics.get(LittleEndian);
-    if characteristics & pe::IMAGE_FILE_EXECUTABLE_IMAGE == 0
-        || characteristics & pe::IMAGE_FILE_DLL != 0
+    if !characteristics.contains(pe::IMAGE_FILE_EXECUTABLE_IMAGE)
+        || characteristics.contains(pe::IMAGE_FILE_DLL)
     {
         return Err(invalid_data(
             "PE runtime template is not an executable image",
@@ -1275,8 +1276,8 @@ fn pe_runtime_content_layout(anchor_end: u64, content_len: u64) -> io::Result<(u
 struct MachOLayout {
     header: MachHeader64<LittleEndian>,
     prefix: Vec<u8>,
-    cpu_type: u32,
-    cpu_subtype: u32,
+    cpu_type: macho::CpuType,
+    cpu_subtype: macho::CpuSubtype,
     first_section_offset: Option<u64>,
     linkedit_command_offset: usize,
     linkedit_vmaddr: u64,
@@ -1346,8 +1347,8 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
         ));
     }
     let header_flags = header.flags(LittleEndian);
-    if header_flags & (macho::MH_DYLDLINK | macho::MH_PIE) != (macho::MH_DYLDLINK | macho::MH_PIE)
-        || header_flags & macho::MH_ALLOW_STACK_EXECUTION != 0
+    if !header_flags.contains(macho::MH_DYLDLINK | macho::MH_PIE)
+        || header_flags.contains(macho::MH_ALLOW_STACK_EXECUTION)
     {
         return Err(invalid_data(
             "Mach-O runtime template has unsupported executable flags",
@@ -1356,8 +1357,8 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
     let cpu_type = header.cputype(LittleEndian);
     let cpu_subtype = header.cpusubtype(LittleEndian);
     let expected_subtype = match cpu_type {
-        macho::CPU_TYPE_X86_64 => macho::CPU_SUBTYPE_X86_64_ALL,
-        macho::CPU_TYPE_ARM64 => macho::CPU_SUBTYPE_ARM64_ALL,
+        macho::CPU_TYPE_X86_64 => macho::CPU_SUBTYPE_X86_64_ALL.into(),
+        macho::CPU_TYPE_ARM64 => macho::CPU_SUBTYPE_ARM64_ALL.into(),
         _ => cpu_subtype,
     };
     if cpu_subtype != expected_subtype {
@@ -1450,14 +1451,12 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
             let (fileoff, filesize) = segment.file_range(LittleEndian);
             let maxprot = segment.maxprot(LittleEndian);
             let initprot = segment.initprot(LittleEndian);
-            if initprot & !maxprot != 0 {
+            if !maxprot.contains(initprot) {
                 return Err(invalid_data(
                     "Mach-O segment initial protections exceed maximum protections",
                 ));
             }
-            if (initprot | maxprot) & (macho::VM_PROT_WRITE | macho::VM_PROT_EXECUTE)
-                == (macho::VM_PROT_WRITE | macho::VM_PROT_EXECUTE)
-            {
+            if (initprot | maxprot).contains(macho::VM_PROT_WRITE | macho::VM_PROT_EXECUTE) {
                 return Err(invalid_data(
                     "Mach-O segment permits writable executable memory",
                 ));
@@ -1482,9 +1481,8 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
                     .checked_add(1)
                     .ok_or_else(|| invalid_data("Mach-O __TEXT segment count overflow"))?;
                 if fileoff != 0
-                    || initprot & (macho::VM_PROT_READ | macho::VM_PROT_EXECUTE)
-                        != (macho::VM_PROT_READ | macho::VM_PROT_EXECUTE)
-                    || initprot & macho::VM_PROT_WRITE != 0
+                    || !initprot.contains(macho::VM_PROT_READ | macho::VM_PROT_EXECUTE)
+                    || initprot.contains(macho::VM_PROT_WRITE)
                     || segment_end < command_end as u64
                 {
                     return Err(invalid_data(
@@ -1505,7 +1503,8 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
             let sections = segment
                 .sections(LittleEndian, section_data)
                 .map_err(macho_error)?;
-            for section in sections {
+            for section in segment.section_offsets(LittleEndian, sections) {
+                let (section, section_offset) = section.map_err(macho_error)?;
                 if section.segname != segment.segname {
                     return Err(invalid_data(
                         "Mach-O section segment name does not match its segment",
@@ -1522,7 +1521,7 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
                         "Mach-O section extends outside its virtual segment",
                     ));
                 }
-                if let Some((offset, size)) = section.file_range(LittleEndian) {
+                if let Some((offset, size)) = section.file_range(LittleEndian, section_offset) {
                     let section_end = offset
                         .checked_add(size)
                         .ok_or_else(|| invalid_data("Mach-O section file range overflow"))?;
@@ -1541,7 +1540,7 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
                     if is_linkedit {
                         add_macho_byte_range(&mut referenced_ranges, offset, size);
                     }
-                    if initprot & macho::VM_PROT_EXECUTE != 0 {
+                    if initprot.contains(macho::VM_PROT_EXECUTE) {
                         executable_section_ranges.push((offset, section_end));
                     }
                 }
@@ -1559,7 +1558,7 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
                     }
                     if !is_text
                         || section_size != READER_CAPABILITY_RECORD_LEN as u64
-                        || section.flags.get(LittleEndian) & macho::SECTION_TYPE != macho::S_REGULAR
+                        || section.section_type(LittleEndian) != macho::S_REGULAR
                         || section.nreloc.get(LittleEndian) != 0
                         || section.reserved1.get(LittleEndian) != 0
                         || section.reserved2.get(LittleEndian) != 0
@@ -1569,9 +1568,11 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
                             "Mach-O reader capability section has an invalid layout",
                         ));
                     }
-                    let (offset, size) = section.file_range(LittleEndian).ok_or_else(|| {
-                        invalid_data("Mach-O reader capability section has no file data")
-                    })?;
+                    let (offset, size) = section
+                        .file_range(LittleEndian, section_offset)
+                        .ok_or_else(|| {
+                            invalid_data("Mach-O reader capability section has no file data")
+                        })?;
                     reader_capability = Some((offset, size));
                 }
             }
@@ -1759,9 +1760,9 @@ fn read_macho_layout(file: &mut File, file_len: u64) -> io::Result<MachOLayout> 
             | macho::LC_LINKER_OPTIMIZATION_HINT
             | macho::LC_DYLD_EXPORTS_TRIE
             | macho::LC_DYLD_CHAINED_FIXUPS
-            | MACHO_LC_ATOM_INFO
-            | MACHO_LC_FUNCTION_VARIANTS
-            | MACHO_LC_FUNCTION_VARIANT_FIXUPS
+            | macho::LC_ATOM_INFO
+            | macho::LC_FUNCTION_VARIANTS
+            | macho::LC_FUNCTION_VARIANT_FIXUPS
             | MACHO_LC_LAZY_LOAD_DYLIB_INFO => {
                 let data = command
                     .data::<LinkeditDataCommand<LittleEndian>>()
@@ -2163,7 +2164,7 @@ struct FooterSearchSpec {
 fn macho_footer_search_spec(
     file: &mut File,
     file_len: u64,
-) -> io::Result<(FooterSearchSpec, u32, u32)> {
+) -> io::Result<(FooterSearchSpec, macho::CpuType, macho::CpuSubtype)> {
     let layout = read_macho_layout(file, file_len)?;
     validate_macho_final_layout(&layout, file_len)?;
     match layout.cpu_type {
@@ -2562,14 +2563,14 @@ mod tests {
         bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
     }
 
-    fn macho_command_offset(bytes: &[u8], wanted: u32) -> usize {
+    fn macho_command_offset(bytes: &[u8], wanted: macho::LoadCommandType) -> usize {
         let command_count = u32::from_le_bytes(bytes[16..20].try_into().unwrap());
         let mut offset = MACHO_HEADER_LEN;
         for _ in 0..command_count {
             let command = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
             let command_size =
                 u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().unwrap()) as usize;
-            if command == wanted {
+            if command == wanted.0 {
                 return offset;
             }
             offset += command_size;
@@ -2603,7 +2604,7 @@ mod tests {
             .unwrap();
     }
 
-    fn macho_fixture(cpu_type: u32, with_signature: bool) -> tempfile::NamedTempFile {
+    fn macho_fixture(cpu_type: macho::CpuType, with_signature: bool) -> tempfile::NamedTempFile {
         const SEGMENT_LEN: usize = std::mem::size_of::<SegmentCommand64<LittleEndian>>();
         const SECTION_LEN: usize = std::mem::size_of::<macho::Section64<LittleEndian>>();
         const BUILD_VERSION_LEN: usize =
@@ -2624,23 +2625,23 @@ mod tests {
             + SEGMENT_LEN
             + usize::from(with_signature) * MACHO_CODE_SIGNATURE_LEN;
         write_u32(&mut bytes, 0, macho::MH_MAGIC_64);
-        write_u32(&mut bytes, 4, cpu_type);
+        write_u32(&mut bytes, 4, cpu_type.0);
         write_u32(
             &mut bytes,
             8,
             match cpu_type {
-                macho::CPU_TYPE_X86_64 => macho::CPU_SUBTYPE_X86_64_ALL,
-                macho::CPU_TYPE_ARM64 => macho::CPU_SUBTYPE_ARM64_ALL,
+                macho::CPU_TYPE_X86_64 => macho::CPU_SUBTYPE_X86_64_ALL.0,
+                macho::CPU_TYPE_ARM64 => macho::CPU_SUBTYPE_ARM64_ALL.0,
                 _ => 0,
             },
         );
-        write_u32(&mut bytes, 12, macho::MH_EXECUTE);
+        write_u32(&mut bytes, 12, macho::MH_EXECUTE.0);
         write_u32(&mut bytes, 16, 5 + u32::from(with_signature));
         write_u32(&mut bytes, 20, commands_len as u32);
-        write_u32(&mut bytes, 24, macho::MH_DYLDLINK | macho::MH_PIE);
+        write_u32(&mut bytes, 24, macho::MH_DYLDLINK.0 | macho::MH_PIE.0);
 
         let text = MACHO_HEADER_LEN;
-        write_u32(&mut bytes, text, macho::LC_SEGMENT_64);
+        write_u32(&mut bytes, text, macho::LC_SEGMENT_64.0);
         write_u32(&mut bytes, text + 4, text_len as u32);
         bytes[text + 8..text + 14].copy_from_slice(b"__TEXT");
         write_u64(&mut bytes, text + 24, 0x1_0000_0000);
@@ -2670,17 +2671,17 @@ mod tests {
         write_u32(&mut bytes, capability + 48, 0x240);
 
         let mut cursor = text + text_len;
-        write_u32(&mut bytes, cursor, macho::LC_BUILD_VERSION);
+        write_u32(&mut bytes, cursor, macho::LC_BUILD_VERSION.0);
         write_u32(&mut bytes, cursor + 4, BUILD_VERSION_LEN as u32);
-        write_u32(&mut bytes, cursor + 8, macho::PLATFORM_MACOS);
+        write_u32(&mut bytes, cursor + 8, macho::PLATFORM_MACOS.0);
         cursor += BUILD_VERSION_LEN;
 
-        write_u32(&mut bytes, cursor, macho::LC_MAIN);
+        write_u32(&mut bytes, cursor, macho::LC_MAIN.0);
         write_u32(&mut bytes, cursor + 4, ENTRY_POINT_LEN as u32);
         write_u64(&mut bytes, cursor + 8, 0x200);
         cursor += ENTRY_POINT_LEN;
 
-        write_u32(&mut bytes, cursor, macho::LC_LOAD_DYLINKER);
+        write_u32(&mut bytes, cursor, macho::LC_LOAD_DYLINKER.0);
         write_u32(&mut bytes, cursor + 4, DYLINKER_LEN as u32);
         write_u32(
             &mut bytes,
@@ -2691,7 +2692,7 @@ mod tests {
         cursor += DYLINKER_LEN;
 
         if with_signature {
-            write_u32(&mut bytes, cursor, macho::LC_CODE_SIGNATURE);
+            write_u32(&mut bytes, cursor, macho::LC_CODE_SIGNATURE.0);
             write_u32(&mut bytes, cursor + 4, MACHO_CODE_SIGNATURE_LEN as u32);
             write_u32(&mut bytes, cursor + 8, 0x300);
             write_u32(&mut bytes, cursor + 12, 0x100);
@@ -2699,7 +2700,7 @@ mod tests {
         }
 
         let linkedit = cursor;
-        write_u32(&mut bytes, linkedit, macho::LC_SEGMENT_64);
+        write_u32(&mut bytes, linkedit, macho::LC_SEGMENT_64.0);
         write_u32(&mut bytes, linkedit + 4, SEGMENT_LEN as u32);
         bytes[linkedit + 8..linkedit + 18].copy_from_slice(b"__LINKEDIT");
         write_u64(&mut bytes, linkedit + 24, 0x1_0000_1000);
@@ -2747,7 +2748,7 @@ mod tests {
                 .checked_add(MACHO_CODE_SIGNATURE_LEN as u32)
                 .unwrap(),
         );
-        write_u32(&mut bytes, command_offset, macho::LC_CODE_SIGNATURE);
+        write_u32(&mut bytes, command_offset, macho::LC_CODE_SIGNATURE.0);
         write_u32(
             &mut bytes,
             command_offset + 4,
@@ -2786,7 +2787,7 @@ mod tests {
 
     fn add_macho_linkedit_command_and_signature(
         binary: &Path,
-        command: u32,
+        command: macho::LoadCommandType,
         data_offset: u32,
         data_size: u32,
     ) {
@@ -2809,7 +2810,7 @@ mod tests {
             20,
             layout.header.sizeofcmds(LittleEndian) + 2 * MACHO_CODE_SIGNATURE_LEN as u32,
         );
-        write_u32(&mut bytes, command_offset, command);
+        write_u32(&mut bytes, command_offset, command.0);
         write_u32(
             &mut bytes,
             command_offset + 4,
@@ -2818,7 +2819,7 @@ mod tests {
         write_u32(&mut bytes, command_offset + 8, data_offset);
         write_u32(&mut bytes, command_offset + 12, data_size);
         let signature_command = command_offset + MACHO_CODE_SIGNATURE_LEN;
-        write_u32(&mut bytes, signature_command, macho::LC_CODE_SIGNATURE);
+        write_u32(&mut bytes, signature_command, macho::LC_CODE_SIGNATURE.0);
         write_u32(
             &mut bytes,
             signature_command + 4,
@@ -2843,9 +2844,9 @@ mod tests {
             &mut bytes,
             pe_offset + 4,
             if is_64 {
-                object::pe::IMAGE_FILE_MACHINE_AMD64
+                object::pe::IMAGE_FILE_MACHINE_AMD64.0
             } else {
-                object::pe::IMAGE_FILE_MACHINE_I386
+                object::pe::IMAGE_FILE_MACHINE_I386.0
             },
         );
         write_u16(&mut bytes, pe_offset + 6, 1);
@@ -2853,7 +2854,7 @@ mod tests {
         write_u16(
             &mut bytes,
             pe_offset + 22,
-            object::pe::IMAGE_FILE_EXECUTABLE_IMAGE,
+            object::pe::IMAGE_FILE_EXECUTABLE_IMAGE.0,
         );
         write_u16(
             &mut bytes,
@@ -2871,7 +2872,7 @@ mod tests {
         write_u16(
             &mut bytes,
             optional_offset + 68,
-            object::pe::IMAGE_SUBSYSTEM_WINDOWS_CUI,
+            object::pe::IMAGE_SUBSYSTEM_WINDOWS_CUI.0,
         );
         write_u32(
             &mut bytes,
@@ -2910,7 +2911,7 @@ mod tests {
         write_u32(
             &mut bytes,
             capability + 36,
-            PE_ANCHOR_SECTION_CHARACTERISTICS,
+            PE_ANCHOR_SECTION_CHARACTERISTICS.0,
         );
         bytes.resize(0x600, 0);
         bytes[0x400..0x400 + READER_CAPABILITY_RECORD_LEN]
@@ -3285,7 +3286,7 @@ mod tests {
     fn test_macho_writer_rejects_non_executable_template_without_modifying_input() {
         let binary = macho_fixture(macho::CPU_TYPE_ARM64, true);
         let mut bytes = std::fs::read(binary.path()).unwrap();
-        write_u32(&mut bytes, 12, macho::MH_DYLIB);
+        write_u32(&mut bytes, 12, macho::MH_DYLIB.0);
         std::fs::write(binary.path(), &bytes).unwrap();
 
         let error = append_to_binary(
@@ -3307,7 +3308,7 @@ mod tests {
         let binary = macho_fixture(macho::CPU_TYPE_ARM64, true);
         let mut bytes = std::fs::read(binary.path()).unwrap();
         let build_version = macho_command_offset(&bytes, macho::LC_BUILD_VERSION);
-        write_u32(&mut bytes, build_version + 8, macho::PLATFORM_IOS);
+        write_u32(&mut bytes, build_version + 8, macho::PLATFORM_IOS.0);
         std::fs::write(binary.path(), &bytes).unwrap();
 
         let error = append_to_binary(
@@ -3607,7 +3608,7 @@ mod tests {
         write_u16(
             &mut bytes,
             pe_offset + 4,
-            object::pe::IMAGE_FILE_MACHINE_I386,
+            object::pe::IMAGE_FILE_MACHINE_I386.0,
         );
         std::fs::write(binary.path(), &bytes).unwrap();
         let mut header = RuntimeDataHeader::for_name("wrong-image-kind");
@@ -3624,7 +3625,7 @@ mod tests {
         let binary = pe_fixture(true);
         let mut bytes = std::fs::read(binary.path()).unwrap();
         let pe_offset = u32::from_le_bytes(bytes[0x3c..0x40].try_into().unwrap()) as usize;
-        write_u16(&mut bytes, pe_offset + 22, pe::IMAGE_FILE_DLL);
+        write_u16(&mut bytes, pe_offset + 22, pe::IMAGE_FILE_DLL.0);
         std::fs::write(binary.path(), &bytes).unwrap();
 
         let error = append_to_binary(
