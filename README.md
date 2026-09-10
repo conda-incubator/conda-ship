@@ -1,9 +1,9 @@
 # conda-ship
 
-[![CI](https://github.com/jezdez/conda-ship/actions/workflows/ci.yml/badge.svg)](https://github.com/jezdez/conda-ship/actions/workflows/ci.yml)
-[![Docs](https://github.com/jezdez/conda-ship/actions/workflows/docs.yml/badge.svg)](https://jezdez.github.io/conda-ship/)
-[![zizmor](https://img.shields.io/badge/%F0%9F%8C%88-zizmor-white?labelColor=white)](https://github.com/jezdez/conda-ship/actions/workflows/zizmor.yml)
-[![License](https://img.shields.io/github/license/jezdez/conda-ship)](https://github.com/jezdez/conda-ship/blob/main/LICENSE)
+[![CI](https://github.com/conda-incubator/conda-ship/actions/workflows/ci.yml/badge.svg)](https://github.com/conda-incubator/conda-ship/actions/workflows/ci.yml)
+[![Docs](https://github.com/conda-incubator/conda-ship/actions/workflows/docs.yml/badge.svg)](https://conda-incubator.github.io/conda-ship/)
+[![zizmor](https://img.shields.io/badge/%F0%9F%8C%88-zizmor-white?labelColor=white)](https://github.com/conda-incubator/conda-ship/actions/workflows/zizmor.yml)
+[![License](https://img.shields.io/github/license/conda-incubator/conda-ship)](https://github.com/conda-incubator/conda-ship/blob/main/LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
 
 Build ready-to-run conda runtimes from solved conda environments.
@@ -60,7 +60,7 @@ cs build
 
 For a guided walkthrough with automatic first-run bootstrap and embedded runtime
 examples, see the
-[first runtime tutorial](https://jezdez.github.io/conda-ship/tutorials/first-runtime/).
+[first runtime tutorial](https://conda-incubator.github.io/conda-ship/tutorials/first-runtime/).
 
 ## What It Builds
 
@@ -182,7 +182,7 @@ The repository root is also a composite GitHub Action for downstream release
 jobs:
 
 ```yaml
-- uses: jezdez/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
+- uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
   id: cs
   with:
     conda-ship-version: "X.Y.Z"
@@ -236,14 +236,14 @@ continue to describe the pre-sign build output.
 ## Documentation
 
 Full documentation is available at
-[jezdez.github.io/conda-ship](https://jezdez.github.io/conda-ship/).
+[conda-incubator.github.io/conda-ship](https://conda-incubator.github.io/conda-ship/).
 
 Useful starting points:
 
-- [Build your first runtime](https://jezdez.github.io/conda-ship/tutorials/first-runtime/)
-- [Build in GitHub Actions](https://jezdez.github.io/conda-ship/how-to/build-in-github-actions/)
-- [Configuration reference](https://jezdez.github.io/conda-ship/reference/configuration/)
-- [Project boundaries](https://jezdez.github.io/conda-ship/explanation/project-boundaries/)
+- [Build your first runtime](https://conda-incubator.github.io/conda-ship/tutorials/first-runtime/)
+- [Build in GitHub Actions](https://conda-incubator.github.io/conda-ship/how-to/build-in-github-actions/)
+- [Configuration reference](https://conda-incubator.github.io/conda-ship/reference/configuration/)
+- [Project boundaries](https://conda-incubator.github.io/conda-ship/explanation/project-boundaries/)
 
 ## Development
 
@@ -271,6 +271,13 @@ the visible commands match the packaged workflow.
 
 Run `cargo generate-lockfile` after changing Cargo metadata and `pixi lock`
 after changing pixi metadata.
+
+## Maintenance
+
+conda-ship is a [federated project](https://github.com/conda/governance#federated-projects)
+in [conda-incubator](https://github.com/conda-incubator).
+The [conda-ship project team](https://github.com/orgs/conda-incubator/teams/conda-ship)
+maintains this repository. For help, [open an issue](https://github.com/conda-incubator/conda-ship/issues).
 
 ## License
 

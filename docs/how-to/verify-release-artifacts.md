@@ -18,7 +18,7 @@ Pin the action source by full commit SHA and pass the matching conda-ship
 release version:
 
 ```yaml
-- uses: jezdez/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
+- uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
   with:
     conda-ship-version: "X.Y.Z"
 ```
@@ -26,6 +26,13 @@ release version:
 When the action is invoked by an exact release tag, `conda-ship-version` can be
 omitted for backwards compatibility. Release workflows should prefer full
 commit SHA pins.
+
+The move to `conda-incubator` changed how GitHub serves attestations for
+releases through 0.9.0. Those release tags still contain the original action
+and cannot use the transferred attestations. To use their tools, pin an
+action commit containing the incubation migration and pass the tool version
+explicitly, such as `conda-ship-version: "0.9.0"`. See the
+[artifact reference](../reference/artifacts.md) for manual verification.
 
 Self-hosted runners must provide the GitHub CLI because the action calls
 `gh attestation verify`.
@@ -154,7 +161,7 @@ permissions:
   artifact-metadata: write
 
 steps:
-  - uses: jezdez/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
+  - uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
     id: cs
     with:
       conda-ship-version: "X.Y.Z"

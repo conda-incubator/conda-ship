@@ -105,12 +105,12 @@ explicitly:
 
 ```toml
 [dependencies]
-conda-ship = { git = "https://github.com/jezdez/conda-ship", rev = "<pinned-commit>", features = ["fleet"] }
+conda-ship = { git = "https://github.com/conda-incubator/conda-ship", rev = "<pinned-commit>", features = ["fleet"] }
 ```
 
 To use native TLS:
 
 ```toml
 [dependencies]
-conda-ship = { git = "https://github.com/jezdez/conda-ship", rev = "<pinned-commit>", default-features = false, features = ["fleet", "native-tls"] }
+conda-ship = { git = "https://github.com/conda-incubator/conda-ship", rev = "<pinned-commit>", default-features = false, features = ["fleet", "native-tls"] }
 ```

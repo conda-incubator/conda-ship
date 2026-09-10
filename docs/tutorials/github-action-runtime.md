@@ -76,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: jezdez/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
+      - uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
         id: cs
         with:
           conda-ship-version: "X.Y.Z"
@@ -146,7 +146,7 @@ Keep package and channel choices in the manifest and lockfile. Use action inputs
 for release-job metadata that may vary across a matrix:
 
 ```yaml
-- uses: jezdez/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
+- uses: conda-incubator/conda-ship@FULL_RELEASE_COMMIT_SHA # X.Y.Z
   id: cs
   with:
     conda-ship-version: "X.Y.Z"

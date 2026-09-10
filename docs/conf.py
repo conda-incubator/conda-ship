@@ -1,5 +1,7 @@
 """Sphinx configuration for conda-ship documentation."""
 
+from __future__ import annotations
+
 import os
 import sys
 
@@ -35,7 +37,7 @@ html_theme_options = {
     "icon_links": [
         {
             "name": "GitHub",
-            "url": "https://github.com/jezdez/conda-ship",
+            "url": "https://github.com/conda-incubator/conda-ship",
             "icon": "fa-brands fa-square-github",
             "type": "fontawesome",
         },
@@ -43,13 +45,13 @@ html_theme_options = {
 }
 
 html_context = {
-    "github_user": "jezdez",
+    "github_user": "conda-incubator",
     "github_repo": "conda-ship",
     "github_version": "main",
     "doc_path": "docs",
 }
 
-html_baseurl = "https://jezdez.github.io/conda-ship/"
+html_baseurl = "https://conda-incubator.github.io/conda-ship/"
 
 intersphinx_mapping = {
     "conda-express": ("https://jezdez.github.io/conda-express/", None),
