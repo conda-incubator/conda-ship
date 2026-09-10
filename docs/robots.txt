@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jezdez.github.io/conda-ship/sitemap.xml
+Sitemap: https://conda-incubator.github.io/conda-ship/sitemap.xml

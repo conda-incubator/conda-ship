@@ -5,14 +5,14 @@ multiple locked prefixes. Enable it explicitly:
 
 ```toml
 [dependencies]
-conda-ship = { git = "https://github.com/jezdez/conda-ship", rev = "<pinned-commit>", features = ["fleet"] }
+conda-ship = { git = "https://github.com/conda-incubator/conda-ship", rev = "<pinned-commit>", features = ["fleet"] }
 ```
 
 For a native-TLS caller:
 
 ```toml
 [dependencies]
-conda-ship = { git = "https://github.com/jezdez/conda-ship", rev = "<pinned-commit>", default-features = false, features = ["fleet", "native-tls"] }
+conda-ship = { git = "https://github.com/conda-incubator/conda-ship", rev = "<pinned-commit>", default-features = false, features = ["fleet", "native-tls"] }
 ```
 
 Fleet does not solve environments, publish catalogs, add a runtime command
