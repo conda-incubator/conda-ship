@@ -163,13 +163,30 @@ async fn download_and_bundle(
     );
 
     let bundle_start = std::time::Instant::now();
+    let paths = std::fs::read_dir(&bundle_dir)?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+    write_bundle(paths, bundle_path)?;
+
+    let bundle_size = std::fs::metadata(bundle_path)?.len();
+    eprintln!(
+        "bundle.tar.zst = {:.1} MB ({} packages, bundled in {:.1}s)",
+        bundle_size as f64 / 1_048_576.0,
+        packages.len(),
+        bundle_start.elapsed().as_secs_f64()
+    );
+
+    Ok(())
+}
+
+fn write_bundle(mut paths: Vec<PathBuf>, bundle_path: &Path) -> std::io::Result<()> {
+    paths.sort_unstable();
     let out_file = std::fs::File::create(bundle_path)?;
     let zstd_encoder = zstd::Encoder::new(out_file, 1)?;
     let mut tar_builder = tar::Builder::new(zstd_encoder);
+    tar_builder.mode(tar::HeaderMode::Deterministic);
 
-    for entry in std::fs::read_dir(&bundle_dir)? {
-        let entry = entry?;
-        let path = entry.path();
+    for path in paths {
         if path.is_file()
             && let Some(name) = path.file_name()
         {
@@ -179,14 +196,6 @@ async fn download_and_bundle(
 
     let zstd_encoder = tar_builder.into_inner()?;
     zstd_encoder.finish()?;
-
-    let bundle_size = std::fs::metadata(bundle_path)?.len();
-    eprintln!(
-        "bundle.tar.zst = {:.1} MB ({} packages, bundled in {:.1}s)",
-        bundle_size as f64 / 1_048_576.0,
-        packages.len(),
-        bundle_start.elapsed().as_secs_f64()
-    );
 
     Ok(())
 }
@@ -271,6 +280,80 @@ mod tests {
         entry.read_to_end(&mut contents).unwrap();
         assert_eq!(contents, PACKAGE_BYTES);
         assert!(entries.next().is_none());
+    }
+
+    #[rstest]
+    #[case::entry_order(true, false)]
+    #[case::filesystem_metadata(false, true)]
+    fn test_bundle_is_reproducible(#[case] reverse_order: bool, #[case] change_metadata: bool) {
+        let tmp = TempDir::new().unwrap();
+        let packages = [
+            ("a-1.0-0.conda", b"first package".as_slice()),
+            ("z-1.0-0.tar.bz2", b"second package".as_slice()),
+        ];
+        let mut paths = Vec::new();
+        for (name, contents) in packages {
+            let path = tmp.path().join(name);
+            std::fs::write(&path, contents).unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(1_000_000_000))
+                .unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+            }
+            paths.push(path);
+        }
+        let first = tmp.path().join("first.tar.zst");
+        write_bundle(paths.clone(), &first).unwrap();
+
+        if reverse_order {
+            paths.reverse();
+        }
+        if change_metadata {
+            for path in &paths {
+                std::fs::File::options()
+                    .write(true)
+                    .open(path)
+                    .unwrap()
+                    .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(1_100_000_000))
+                    .unwrap();
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o644)).unwrap();
+                }
+            }
+        }
+        let second = tmp.path().join("second.tar.zst");
+        write_bundle(paths, &second).unwrap();
+
+        assert_eq!(
+            std::fs::read(&first).unwrap(),
+            std::fs::read(&second).unwrap()
+        );
+        let decoder = zstd::Decoder::new(std::fs::File::open(second).unwrap()).unwrap();
+        let mut archive = tar::Archive::new(decoder);
+        let actual = archive
+            .entries()
+            .unwrap()
+            .map(|entry| {
+                let mut entry = entry.unwrap();
+                assert_eq!(entry.header().uid().unwrap(), 0);
+                assert_eq!(entry.header().gid().unwrap(), 0);
+                assert_eq!(entry.header().mode().unwrap(), 0o644);
+                let name = entry.path().unwrap().into_owned();
+                let mut contents = Vec::new();
+                entry.read_to_end(&mut contents).unwrap();
+                (name, contents)
+            })
+            .collect::<Vec<_>>();
+        let expected = packages.map(|(name, contents)| (PathBuf::from(name), contents.to_vec()));
+        assert_eq!(actual, expected);
     }
 
     #[rstest]

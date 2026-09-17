@@ -2,6 +2,13 @@
 
 All notable changes to `conda-ship` are documented here.
 
+## Unreleased
+
+### Fixed
+
+- Made package bundles reproducible by sorting archive entries and normalizing
+  their timestamps, ownership, and permissions.
+
 ## 0.9.1 - 2026-09-10
 
 ### Fixed
