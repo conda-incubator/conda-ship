@@ -2,7 +2,7 @@
 
 All notable changes to `conda-ship` are documented here.
 
-## Unreleased
+## 0.9.2 - 2026-09-17
 
 ### Fixed
 
@@ -10,6 +10,8 @@ All notable changes to `conda-ship` are documented here.
   their timestamps, ownership, and permissions.
 - Allowed package bundles to include verified local archives from paths and
   `file://` channels. Relative package paths are resolved from the source lockfile.
+- Updated `rustls` to 0.23.45 to address
+  [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285.html).
 
 ## 0.9.1 - 2026-09-10
 
