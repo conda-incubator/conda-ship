@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::Platform;
-use rattler_lock::{CondaPackageData, LockFile};
+use rattler_lock::{CondaPackageData, LockFile, UrlOrPath};
 use sha2::Digest;
 
 use super::artifact::{validate_bundle_package_hashes, validate_package_archive_name};
@@ -81,16 +81,12 @@ async fn download_and_bundle(
         let client = client.clone();
         let bundle_dir = bundle_dir.clone();
         async move {
-            let url = pkg
-                .location()
-                .as_url()
-                .ok_or_else(|| format!("package location is not a URL: {:?}", pkg.location()))?;
-            let archive_name = url
-                .path_segments()
-                .and_then(|mut s| s.next_back())
-                .ok_or_else(|| format!("package URL has no archive name: {url}"))?;
+            let location = pkg.location();
+            let archive_name = location
+                .file_name()
+                .ok_or_else(|| format!("package location has no archive name: {location}"))?;
             validate_package_archive_name(archive_name)
-                .map_err(|e| format!("invalid package archive name from {url}: {e}"))?;
+                .map_err(|e| format!("invalid package archive name from {location}: {e}"))?;
 
             let dest = bundle_dir.join(archive_name);
             let expected = pkg
@@ -111,32 +107,46 @@ async fn download_and_bundle(
                 std::fs::remove_file(&dest)?;
             }
 
-            let mut response = client
-                .get(url.clone())
-                .send()
-                .await
-                .map_err(|e| format!("failed to fetch {archive_name}: {e}"))?;
-
-            let status = response.status();
-            if !status.is_success() {
-                return Err(format!("HTTP {status} fetching {archive_name}").into());
-            }
-
             let tmp_dest = dest.with_file_name(format!(".{archive_name}.download"));
-            let mut out = std::fs::File::create(&tmp_dest)?;
-            let mut hasher = sha2::Sha256::new();
-            while let Some(chunk) = response
-                .chunk()
-                .await
-                .map_err(|e| format!("failed to read {archive_name}: {e}"))?
-            {
-                hasher.update(&chunk);
-                out.write_all(&chunk)?;
-            }
-            out.flush()?;
-            drop(out);
+            let actual = match location {
+                UrlOrPath::Path(path) => {
+                    let mut source = std::fs::File::open(path.as_str())
+                        .map_err(|e| format!("failed to read {archive_name}: {e}"))?;
+                    // Copy bytes into a fresh file without inheriting source permissions.
+                    let mut out = std::fs::File::create(&tmp_dest)?;
+                    std::io::copy(&mut source, &mut out)?;
+                    out.flush()?;
+                    drop(out);
+                    crate::hash::sha256_file(&tmp_dest)?.0
+                }
+                UrlOrPath::Url(url) => {
+                    let mut response = client
+                        .get(url.clone())
+                        .send()
+                        .await
+                        .map_err(|e| format!("failed to fetch {archive_name}: {e}"))?;
 
-            let actual = crate::hash::digest_to_array(hasher.finalize());
+                    let status = response.status();
+                    if !status.is_success() {
+                        return Err(format!("HTTP {status} fetching {archive_name}").into());
+                    }
+
+                    let mut out = std::fs::File::create(&tmp_dest)?;
+                    let mut hasher = sha2::Sha256::new();
+                    while let Some(chunk) = response
+                        .chunk()
+                        .await
+                        .map_err(|e| format!("failed to read {archive_name}: {e}"))?
+                    {
+                        hasher.update(&chunk);
+                        out.write_all(&chunk)?;
+                    }
+                    out.flush()?;
+                    drop(out);
+                    crate::hash::digest_to_array(hasher.finalize())
+                }
+            };
+
             if actual.as_slice() != expected.as_slice() {
                 let _ = std::fs::remove_file(&tmp_dest);
                 return Err(format!("SHA256 mismatch for {archive_name}").into());
@@ -257,25 +267,27 @@ mod tests {
         (format!("http://{address}/linux-64/{PACKAGE_NAME}"), server)
     }
 
-    fn package_lock(url: &str, contents: &[u8]) -> LockFile {
+    fn package_lock(location: &str, contents: &[u8]) -> LockFile {
         let sha256 = crate::hash::hex(&crate::hash::digest_to_array(sha2::Sha256::digest(
             contents,
         )));
+        let location = serde_json::to_string(location).unwrap();
         LockFile::from_str_with_base_directory(
             &format!(
-                "version: 6\nenvironments:\n  default:\n    channels: []\n    packages:\n      linux-64:\n        - conda: {url}\npackages:\n  - conda: {url}\n    sha256: {sha256}\n"
+                "version: 6\nenvironments:\n  default:\n    channels: []\n    packages:\n      linux-64:\n        - conda: {location}\npackages:\n  - conda: {location}\n    subdir: linux-64\n    sha256: {sha256}\n"
             ),
             None,
         )
         .unwrap()
     }
 
-    fn assert_bundle_contents(bundle: &Path) {
+    fn assert_bundle_contents(bundle: &Path, package_name: &str) {
         let decoder = zstd::Decoder::new(std::fs::File::open(bundle).unwrap()).unwrap();
         let mut archive = tar::Archive::new(decoder);
         let mut entries = archive.entries().unwrap();
         let mut entry = entries.next().unwrap().unwrap();
-        assert_eq!(entry.path().unwrap(), Path::new(PACKAGE_NAME));
+        assert_eq!(entry.path().unwrap(), Path::new(package_name));
+        assert_eq!(entry.header().mode().unwrap(), 0o644);
         let mut contents = Vec::new();
         entry.read_to_end(&mut contents).unwrap();
         assert_eq!(contents, PACKAGE_BYTES);
@@ -382,7 +394,83 @@ mod tests {
 
         assert_eq!(result.unwrap(), bundle);
         assert_eq!(std::fs::read_dir(&bundle_dir).unwrap().count(), 1);
-        assert_bundle_contents(&bundle);
+        assert_bundle_contents(&bundle, PACKAGE_NAME);
+    }
+
+    #[rstest]
+    fn test_bundle_contains_verified_local_package(
+        #[values(false, true)] file_url: bool,
+        #[values("conda", "tar.bz2")] extension: &str,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let channel = tmp.path().join("local channel #1");
+        std::fs::create_dir(&channel).unwrap();
+        let package_name = format!("demo-1.0-0.{extension}");
+        let source = channel.join(&package_name);
+        std::fs::write(&source, PACKAGE_BYTES).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let location = if file_url {
+            reqwest::Url::from_file_path(&source).unwrap().to_string()
+        } else {
+            source.to_str().unwrap().to_string()
+        };
+        let lock = package_lock(&location, PACKAGE_BYTES);
+        let bundle = tmp.path().join("bundle.tar.zst");
+
+        gen_bundle_from_lock(
+            &lock,
+            &tmp.path().join("runtime.lock"),
+            Platform::Linux64,
+            &bundle,
+        )
+        .unwrap();
+
+        assert_bundle_contents(&bundle, &package_name);
+        assert_eq!(std::fs::read(&source).unwrap(), PACKAGE_BYTES);
+    }
+
+    #[rstest]
+    #[case::missing_package(false, "failed to read")]
+    #[case::checksum_mismatch(true, "SHA256 mismatch")]
+    fn test_failed_local_package_preserves_completed_bundle(
+        #[case] exists: bool,
+        #[case] expected: &str,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let source = tmp.path().join(PACKAGE_NAME);
+        if exists {
+            std::fs::write(&source, b"changed package contents").unwrap();
+        }
+        let lock = package_lock(source.to_str().unwrap(), PACKAGE_BYTES);
+        let bundle = tmp.path().join("bundle.tar.zst");
+        std::fs::write(&bundle, b"previous completed bundle").unwrap();
+
+        let result = gen_bundle_from_lock(
+            &lock,
+            &tmp.path().join("runtime.lock"),
+            Platform::Linux64,
+            &bundle,
+        );
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains(expected), "{error}");
+        assert_eq!(
+            std::fs::read(&bundle).unwrap(),
+            b"previous completed bundle"
+        );
+        assert_eq!(
+            std::fs::read_dir(tmp.path().join("bundle"))
+                .unwrap()
+                .count(),
+            0
+        );
+        if exists {
+            assert_eq!(std::fs::read(&source).unwrap(), b"changed package contents");
+        }
     }
 
     #[rstest]
@@ -447,6 +535,6 @@ mod tests {
         assert!(!std::fs::symlink_metadata(&bundle_dir).unwrap().is_symlink());
         assert_eq!(std::fs::read(&retained).unwrap(), b"unrelated data");
         assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 1);
-        assert_bundle_contents(&bundle);
+        assert_bundle_contents(&bundle, PACKAGE_NAME);
     }
 }

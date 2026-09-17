@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{PackageName, PackageRecord, Platform};
-use rattler_lock::{CondaPackageData, LockFile, LockFileBuilder, PlatformData};
+use rattler_lock::{CondaPackageData, LockFile, LockFileBuilder, PlatformData, UrlOrPath};
 
 use super::diagnostic::{DiagnosticKind, ship_error};
 use super::{
@@ -173,7 +173,23 @@ pub(crate) fn derive_runtime_lock(root: &Path) -> miette::Result<DerivedRuntimeL
             kept
         };
         total_packages += filtered.len();
-        for pkg in filtered {
+        for mut pkg in filtered {
+            if let CondaPackageData::Binary(binary) = &mut pkg
+                && let Some(path) = binary.location.as_path()
+                && !path.is_absolute()
+            {
+                let absolute_path = std::path::absolute(
+                    input.lock_path.parent().unwrap_or(root).join(path.as_str()),
+                )
+                .into_diagnostic()
+                .context("failed to resolve local package path relative to the source lockfile")?;
+                binary.location = UrlOrPath::Path(
+                    absolute_path
+                        .to_str()
+                        .ok_or_else(|| miette::miette!("local package path is not valid UTF-8"))?
+                        .into(),
+                );
+            }
             resolved_package_names.insert(package_record(&pkg)?.name.as_normalized().to_string());
             builder
                 .add_conda_package("default", platform.name().as_str(), pkg)
