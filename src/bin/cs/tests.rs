@@ -217,6 +217,56 @@ packages:
     assert_eq!(derived.total_packages, 1);
 }
 
+#[rstest]
+fn test_derive_runtime_lock_resolves_local_packages(
+    #[values(false, true)] absolute_location: bool,
+    #[values(false, true)] relative_root: bool,
+) {
+    let current_dir = std::env::current_dir().unwrap();
+    let tmp = TempDir::new_in(&current_dir).unwrap();
+    std::fs::write(
+        tmp.path().join("pixi.toml"),
+        "[tool.conda-ship]\nsource-environment = \"ship\"\n",
+    )
+    .unwrap();
+    let relative_archive = "channel with spaces/linux-64/demo-1.0-0.conda";
+    let expected_path = tmp.path().join(relative_archive);
+    let location = if absolute_location {
+        expected_path.to_str().unwrap()
+    } else {
+        relative_archive
+    };
+    let location = serde_json::to_string(location).unwrap();
+    let sha256 = "a".repeat(64);
+    let source_lock = format!(
+        "version: 6\nenvironments:\n  ship:\n    channels: []\n    packages:\n      linux-64:\n        - conda: {location}\npackages:\n  - conda: {location}\n    subdir: linux-64\n    sha256: {sha256}\n"
+    );
+    let lock_path = tmp.path().join("pixi.lock");
+    std::fs::write(&lock_path, &source_lock).unwrap();
+    let root = if relative_root {
+        tmp.path().strip_prefix(&current_dir).unwrap()
+    } else {
+        tmp.path()
+    };
+
+    let derived = derive_runtime_lock(root).unwrap();
+
+    let env = derived.lock_file.default_environment().unwrap();
+    let (_, mut packages) = env.conda_packages_by_platform().next().unwrap();
+    let path = packages.next().unwrap().location().as_path().unwrap();
+    assert!(path.is_absolute());
+    assert_eq!(Path::new(path.as_str()), expected_path);
+    let reparsed =
+        rattler_lock::LockFile::from_str_with_base_directory(&derived.content, None).unwrap();
+    let env = reparsed.default_environment().unwrap();
+    let platform = env.platforms().next().unwrap();
+    let records = env.conda_repodata_records(platform).unwrap().unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].url.to_file_path().unwrap(), expected_path);
+    assert_eq!(std::fs::read_to_string(lock_path).unwrap(), source_lock);
+    assert!(!expected_path.exists());
+}
+
 #[test]
 fn test_discover_project_input_accepts_project_metadata_runtime_version_source() {
     let tmp = TempDir::new().unwrap();

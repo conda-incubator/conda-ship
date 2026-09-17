@@ -8,6 +8,8 @@ All notable changes to `conda-ship` are documented here.
 
 - Made package bundles reproducible by sorting archive entries and normalizing
   their timestamps, ownership, and permissions.
+- Allowed package bundles to include verified local archives from paths and
+  `file://` channels. Relative package paths are resolved from the source lockfile.
 
 ## 0.9.1 - 2026-09-10
 
