@@ -255,7 +255,7 @@ fn test_derive_runtime_lock_resolves_local_packages(
     let (_, mut packages) = env.conda_packages_by_platform().next().unwrap();
     let path = packages.next().unwrap().location().as_path().unwrap();
     assert!(path.is_absolute());
-    assert_eq!(path.as_str(), expected_path.to_str().unwrap());
+    assert_eq!(Path::new(path.as_str()), expected_path);
     let reparsed =
         rattler_lock::LockFile::from_str_with_base_directory(&derived.content, None).unwrap();
     let env = reparsed.default_environment().unwrap();
