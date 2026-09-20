@@ -93,7 +93,7 @@ toml = "1.1"
 tar = "0.4"
 tempfile = "3"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-zstd = "0.13"
+zstd = "0.14"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
@@ -116,5 +116,5 @@ opt-level = "z"
 assert_cmd = "2"
 insta = { version = "1", features = ["yaml"] }
 predicates = "3"
-rstest = "0.26"
+rstest = "0.27"
 temp-env = "0.3"
