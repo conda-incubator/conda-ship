@@ -2,13 +2,23 @@
 
 All notable changes to `conda-ship` are documented here.
 
-## Unreleased
+## 0.10.0 - 2026-10-02
 
 ### Added
 
-- Added an advisory runtime update probe for downstream notifications. The
-  probe uses cached metadata offline and after network failures, and reports
-  its source and age. It leaves installations and pending updates untouched.
+- Added `v1/probe` for downstream update notifications. It selects native
+  runtime updates without bootstrapping, taking the update lock, changing
+  installed metadata, or staging an update.
+- Probes can use cached repodata offline and fall back to it after network
+  failures. Online requests have a two-second limit. Results include the
+  metadata source and cache age, and report unknown availability when no
+  usable metadata exists. Downstream callers control notification timing and
+  wording.
+
+### Changed
+
+- Clarified the tutorials, how-to guides, explanations, and reference pages
+  while preserving existing examples and links.
 
 ## 0.9.2 - 2026-09-17
 
