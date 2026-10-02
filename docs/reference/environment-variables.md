@@ -52,14 +52,13 @@ Non-alphanumeric characters become underscores and letters are uppercased.
 
 ## Runtime update coordinator variables
 
-These variables configure the version-one helper used by downstream
-transaction coordinators. They are intended for integration code.
-See {doc}`runtime-cli` for the required bootstrap, lock, and call sequence.
+Downstream integration code uses these variables to invoke the version-one
+helper. See {doc}`runtime-cli` for each action's bootstrap and lock requirements.
 
 `CONDA_SHIP_INTERNAL_UPDATE`
 : Select the helper action. Version one defines `v1/record-installation`,
-  `v1/check`, `v1/stage`, and `v1/apply`. Generated runtimes do not reserve a
-  delegate subcommand for these operations.
+  `v1/probe`, `v1/check`, `v1/stage`, and `v1/apply`. Generated runtimes do not
+  reserve a delegate subcommand for these operations.
 
 `CONDA_SHIP_INTERNAL_UPDATE_CANDIDATE`
 : Lowercase SHA256 selected from the `v1/check` result. It is required by
@@ -68,8 +67,10 @@ See {doc}`runtime-cli` for the required bootstrap, lock, and call sequence.
 `CONDA_SHIP_INTERNAL_UPDATE_OFFLINE`
 : Disable network access for update resolution and staging. Empty, `0`, and
   `false` disable the flag. The comparison with `false` is case-insensitive.
-  Other non-empty values enable it. An HTTPS update requires previously cached
-  repodata and package content in this mode. A `file://` channel is read directly.
+  Other non-empty values enable it. For HTTPS channels, probe and check read
+  cached repodata, and stage also needs cached package content. Probe reports
+  unknown availability when no usable metadata is cached. A `file://` channel
+  is read directly.
 
 `CONDA_SHIP_INTERNAL_UPDATE_OWNERSHIP`
 : Installed executable ownership for `v1/record-installation`. Supported values

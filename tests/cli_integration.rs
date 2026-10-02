@@ -448,6 +448,103 @@ fn test_update_package_replaces_the_stable_runtime_from_a_file_channel() {
         String::from_utf8_lossy(&recorded.stderr)
     );
 
+    let probe = |probe_prefix: &Path| {
+        Command::new(&stable)
+            .env("CONDA_SHIP_PREFIX", probe_prefix)
+            .env("CONDA_SHIP_INTERNAL_UPDATE", "v1/probe")
+            .env("CONDA_SHIP_INTERNAL_UPDATE_OFFLINE", "1")
+            .output()
+            .unwrap()
+    };
+    let metadata_path = prefix.join(".demo.json");
+    let original_metadata = std::fs::read(&metadata_path).unwrap();
+    let advisory = probe(&prefix);
+    assert!(
+        advisory.status.success(),
+        "{}",
+        String::from_utf8_lossy(&advisory.stderr)
+    );
+    let advisory: serde_json::Value = serde_json::from_slice(&advisory.stdout).unwrap();
+    assert_eq!(advisory["available"], true);
+    assert_eq!(advisory["version"], "2.0.0");
+    assert_eq!(advisory["source"], "file");
+    assert!(advisory["cache_age_seconds"].is_null());
+    assert_eq!(std::fs::read(&metadata_path).unwrap(), original_metadata);
+
+    // A stale executable must not announce an update for a different generation.
+    let mut newer_metadata: serde_json::Value = serde_json::from_slice(&original_metadata).unwrap();
+    newer_metadata["version"] = serde_json::json!("2.0.0");
+    let newer_metadata = serde_json::to_vec(&newer_metadata).unwrap();
+    std::fs::write(&metadata_path, &newer_metadata).unwrap();
+    let unknown = probe(&prefix);
+    assert!(unknown.status.success());
+    let unknown: serde_json::Value = serde_json::from_slice(&unknown.stdout).unwrap();
+    assert!(unknown["available"].is_null());
+    assert!(unknown["version"].is_null());
+    assert!(unknown["source"].is_null());
+    assert_eq!(std::fs::read(&metadata_path).unwrap(), newer_metadata);
+    std::fs::write(&metadata_path, &original_metadata).unwrap();
+
+    // Advisory reads must not restore interrupted metadata writes or bootstrap.
+    let backup_path = metadata_path.with_extension("bak");
+    std::fs::rename(&metadata_path, &backup_path).unwrap();
+    assert!(!probe(&prefix).status.success());
+    assert!(!metadata_path.exists());
+    assert_eq!(std::fs::read(&backup_path).unwrap(), original_metadata);
+
+    std::fs::create_dir(&metadata_path).unwrap();
+    let rejected = probe(&prefix);
+    assert!(
+        !rejected.status.success(),
+        "probe accepted a metadata directory"
+    );
+    assert!(rejected.stdout.is_empty());
+    assert!(metadata_path.is_dir());
+    assert_eq!(std::fs::read_dir(&metadata_path).unwrap().count(), 0);
+    assert_eq!(std::fs::read(&backup_path).unwrap(), original_metadata);
+    std::fs::remove_dir(&metadata_path).unwrap();
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&backup_path, &metadata_path).unwrap();
+        let rejected = probe(&prefix);
+        assert!(
+            !rejected.status.success(),
+            "probe followed a metadata symlink"
+        );
+        assert!(rejected.stdout.is_empty());
+        assert_eq!(std::fs::read_link(&metadata_path).unwrap(), backup_path);
+        assert_eq!(std::fs::read(&backup_path).unwrap(), original_metadata);
+        std::fs::remove_file(&metadata_path).unwrap();
+    }
+    std::fs::rename(&backup_path, &metadata_path).unwrap();
+
+    std::fs::write(&backup_path, &original_metadata).unwrap();
+    for (field, value) in [
+        ("bootstrap_state", "installing"),
+        ("display_name", "another-runtime"),
+    ] {
+        let mut invalid: serde_json::Value = serde_json::from_slice(&original_metadata).unwrap();
+        invalid[field] = serde_json::json!(value);
+        let invalid_bytes = serde_json::to_vec(&invalid).unwrap();
+        std::fs::write(&metadata_path, &invalid_bytes).unwrap();
+
+        let rejected = probe(&prefix);
+        assert!(!rejected.status.success(), "probe accepted invalid {field}");
+        assert!(rejected.stdout.is_empty());
+        assert_eq!(std::fs::read(&metadata_path).unwrap(), invalid_bytes);
+        assert_eq!(std::fs::read(&backup_path).unwrap(), original_metadata);
+        assert_eq!(
+            std::fs::read(&stable).unwrap(),
+            std::fs::read(&first).unwrap()
+        );
+    }
+    std::fs::remove_file(&backup_path).unwrap();
+    std::fs::write(&metadata_path, &original_metadata).unwrap();
+    let absent_prefix = tmp.path().join("uninitialized");
+    assert!(!probe(&absent_prefix).status.success());
+    assert!(!absent_prefix.exists());
+
     let coordinator = hold_runtime_update_lock(&prefix);
     let check = Command::new(&stable)
         .env("CONDA_SHIP_PREFIX", &prefix)
@@ -495,6 +592,29 @@ fn test_update_package_replaces_the_stable_runtime_from_a_file_channel() {
     assert_eq!(pending["executable_sha256"], package["payload_sha256"]);
     assert!(pending.get("candidate").is_none());
     assert!(pending.get("backup").is_none());
+
+    // A notification between commands must leave an unapproved update intact.
+    drop(coordinator);
+    let staged_metadata_bytes = std::fs::read(&metadata_path).unwrap();
+    let staged_path = install_dir.join(format!(
+        ".{executable_name}.conda-ship-{}.new",
+        &package["payload_sha256"].as_str().unwrap()[..16]
+    ));
+    let staged_executable = std::fs::read(&staged_path).unwrap();
+    let advisory = probe(&prefix);
+    assert!(advisory.status.success());
+    let advisory: serde_json::Value = serde_json::from_slice(&advisory.stdout).unwrap();
+    assert_eq!(advisory["sha256"], selected_sha256);
+    assert_eq!(
+        std::fs::read(&metadata_path).unwrap(),
+        staged_metadata_bytes
+    );
+    assert_eq!(std::fs::read(&staged_path).unwrap(), staged_executable);
+    assert_eq!(
+        std::fs::read(&stable).unwrap(),
+        std::fs::read(&first).unwrap()
+    );
+    let coordinator = hold_runtime_update_lock(&prefix);
 
     let record_while_pending =
         record_installation(&stable, &prefix, "direct", "standalone", &stable, None);

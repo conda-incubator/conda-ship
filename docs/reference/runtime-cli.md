@@ -143,18 +143,16 @@ packages directly.
 
 ## Version-one coordinator API
 
-The helper provides an API for downstream transaction coordinators and
-installers. The coordinator
-invokes the stamped executable as a child process with `CONDA_SHIP_PREFIX` set
-to the managed prefix when it needs to override the runtime's stamped install
-location.
+Downstream coordinators, installers, and notification hooks invoke the stamped
+executable as a child process. Set `CONDA_SHIP_PREFIX` to the managed prefix
+when overriding the runtime's stamped install location.
 
 Before invoking check, stage, or apply, the coordinator opens
 `<prefix>/.RUNTIME_NAME.update.lock` and holds an exclusive operating-system
 file lock. The runtime creates this one-byte regular file during update
 initialization. The coordinator must hold it through check, stage, the inner
-transaction, and apply. Each version-one action fails when the lock is not
-held.
+transaction, and apply. Check, stage, and apply fail when the lock is not held.
+The advisory probe does not require this lock.
 
 ### Record installation
 
@@ -204,6 +202,66 @@ An adopting package manager must invoke this action during installation,
 before the replacement executable is run normally. Post-delegation receipt
 detection cannot adopt a confirmed direct installation after its executable
 has already changed.
+
+### Probe
+
+For update notifications, set:
+
+```text
+CONDA_SHIP_INTERNAL_UPDATE=v1/probe
+```
+
+The probe reads installed runtime metadata and uses check's package selection.
+It leaves metadata, staged updates, and executables untouched. It does not
+bootstrap, initialize update metadata, recover interrupted writes, download
+packages, or acquire the update coordination lock.
+
+A successful probe writes one JSON object to stdout:
+
+```json
+{
+  "available": true,
+  "current_version": "1.0.0",
+  "current_build_number": 0,
+  "version": "1.1.0",
+  "build_number": 0,
+  "package": "demo-runtime",
+  "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "ownership": "direct",
+  "installation": "standalone",
+  "instruction": null,
+  "source": "cache",
+  "cache_age_seconds": 86400
+}
+```
+
+`available` is `true` when the metadata advertises a newer candidate, `false`
+when usable metadata has no newer candidate, and `null` when availability is
+unknown. Candidate fields are `null` unless a candidate is available.
+`source` is `network`, `cache`, or `file`, and is `null` for an unknown result.
+`cache_age_seconds` reports the cached file's age when available, and is `null`
+for other sources. Cached results may be out of date.
+
+Set `CONDA_SHIP_INTERNAL_UPDATE_OFFLINE=1` for a cache-only probe of a remote
+channel. A `file://` channel is read locally in either mode. Online probes
+allow two seconds for the network request and response body. If the request
+fails, times out, or returns invalid metadata, the probe tries the cache.
+Without usable metadata, it returns unknown availability and exits
+successfully. Cache writes are best effort and never wait for another writer.
+
+Missing or invalid installed runtime metadata is a helper error. Callers should
+skip the notification when the helper fails. The caller controls notification
+timing and wording, decides how old cached metadata can be, and handles quiet
+and JSON output modes.
+
+If the executable's version or update source differs from the installed
+metadata, the probe returns unknown availability without contacting the
+channel. A normal invocation or coordinated update must reconcile that state.
+
+An available candidate still needs payload validation and may require a
+download. Probe does not test whether an update can be installed. To perform
+the update, start with check and follow the coordinated stage and apply
+sequence.
 
 ### Check
 
@@ -285,8 +343,8 @@ The coordinator releases the update lock after apply returns. Helper failures
 write diagnostics to stderr and exit nonzero. Successful actions write one JSON
 object to stdout.
 
-Set `CONDA_SHIP_INTERNAL_UPDATE_OFFLINE=1` on check and stage to disable network
-access. Empty, `0`, and `false` leave network access enabled. The comparison
+Set `CONDA_SHIP_INTERNAL_UPDATE_OFFLINE=1` on probe, check, and stage to disable
+network access. Empty, `0`, and `false` leave network access enabled. The comparison
 with `false` is case-insensitive. This flag is separate from the
 runtime-specific bootstrap offline variable.
 

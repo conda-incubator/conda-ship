@@ -164,10 +164,10 @@ HTTPS requests can read credentials from the explicit JSON file selected with
 auth-file discovery. The runtime does not implement an interactive provider
 login or call a provider API.
 
-Offline mode can use a previously cached HTTPS channel only when both its
-repodata and the selected package are already cached. A `file://` channel reads
-repodata and packages directly and does not need a network cache. Cached data is
-still checked against the same package and payload hashes.
+Offline probes and checks of an HTTPS channel use cached repodata. Offline
+staging also requires the selected package to be cached. A `file://` channel
+reads repodata and packages directly and does not need a network cache. Cached
+packages are still checked against the same package and payload hashes.
 
 ## What conda-ship does not promise
 

@@ -2,6 +2,14 @@
 
 All notable changes to `conda-ship` are documented here.
 
+## Unreleased
+
+### Added
+
+- Added an advisory runtime update probe for downstream notifications. The
+  probe uses cached metadata offline and after network failures, and reports
+  its source and age. It leaves installations and pending updates untouched.
+
 ## 0.9.2 - 2026-09-17
 
 ### Fixed
