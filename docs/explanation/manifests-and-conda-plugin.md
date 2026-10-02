@@ -1,9 +1,11 @@
-# Manifests and plugin entry points
+# Manifests And Plugin Entry Points
 
-conda-ship supports conda-workspaces and Pixi manifests and builds runtimes from
-solved conda environments. It does not manage environments.
+conda-ship supports conda-workspaces manifests and Pixi manifests.
 
-## Manifest priority
+conda-ship is not an environment manager. It consumes a solved conda environment
+and turns it into runtimes.
+
+## Manifest Priority
 
 conda-ship looks for `conda.toml`, then `pixi.toml`, then a supported
 `pyproject.toml` in the build root. The embedded `pyproject.toml` form requires
@@ -19,10 +21,10 @@ The lockfile remains the source of concrete package records. If the selected
 lockfile is missing, create it with the tool that owns the manifest, then run
 `cs inspect` or `cs build --dry-run` again.
 
-## Source environment selection
+## Source Environment Selection
 
-Set `[tool.conda-ship].source-environment` to select the solved environment used
-for the runtime:
+The solved environment used for the runtime is selected explicitly by
+`[tool.conda-ship].source-environment`:
 
 ```toml
 [tool.conda-ship]
@@ -42,7 +44,7 @@ environment, renamed to `default` for the generated runtime. The derived lock is
 stamped into staged runtimes and copied into the staged artifact directory. It
 is build output, not another source project lockfile.
 
-## Conda workspace shape
+## Conda Workspace Shape
 
 A conda-workspaces project defines packages and channels using the
 {external+conda-workspaces:doc}`conda-workspaces schema <reference/conda-toml-spec>`
@@ -71,9 +73,9 @@ source-environment = "ship"
 exclude-packages = ["conda-libmamba-solver"]
 ```
 
-`[tool.conda-ship]` configures the source environment to turn into a runtime,
-packages to prune after the solve, artifact naming policy, bundle policy, and
-runtime documentation links.
+`[tool.conda-ship]` is for conda-ship build behavior: which source environment to
+turn into a runtime, which packages to prune after the solve, artifact naming
+policy, bundle policy, and runtime documentation links.
 
 Package and channel settings belong in the
 {external+conda-workspaces:doc}`conda workspace sections <reference/conda-toml-spec>`
@@ -89,7 +91,7 @@ For conda-workspaces projects that keep conda config in `pyproject.toml`, use
 tool table because it configures conda-ship. A `pyproject.toml` containing only
 that table is not a supported source manifest.
 
-## CLI entry points
+## CLI Entry Points
 
 `cs` is the primary builder command. The Python adapter also provides
 `conda ship` when installed in a conda environment. It runs the same `cs`
@@ -101,13 +103,13 @@ a different executable for tests or custom packaging. An invalid override
 causes an error. See {doc}`../reference/conda-plugin` for packaging requirements
 and project metadata version support.
 
-## Builder and runtime template
+## Builder And Runtime Template
 
 The downstream project manifest lives in the downstream repository. The
 conda-ship builder and generic runtime template come from the conda-ship
 release or package installation.
 
-`cs build` copies the selected template and stamps it with the runtime name,
+`cs build` copies the selected template, stamps the copy with the runtime name,
 delegate, install scheme, install name, runtime lock, metadata, and optional
 embedded bundle. That stamped copy is the runtime. conda-ship then writes the
 staged artifacts to the downstream project's output directory. Packaged builds

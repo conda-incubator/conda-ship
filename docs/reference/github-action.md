@@ -1,4 +1,4 @@
-# GitHub Action reference
+# GitHub Action Reference
 
 The repository root provides a composite GitHub Action for downstream
 distribution repositories.
@@ -96,7 +96,7 @@ The action does not duplicate `cs build` validation in shell. It passes
 non-empty inputs to `cs build --dry-run` and then to `cs build`. Invalid values
 fail in the builder.
 
-## Supported runner platforms
+## Supported Runner Platforms
 
 The action selects `cs-<target>` and `cs-template-<target>` from the current
 runner's operating system and architecture:

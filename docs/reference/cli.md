@@ -1,9 +1,9 @@
-# Builder CLI reference
+# Builder CLI Reference
 
 The `cs` CLI builds and stages conda runtimes.
 
-For automatic bootstrap and delegate execution in generated runtimes, see
-{doc}`runtime-cli`.
+This page covers the builder CLI. For automatic bootstrap and delegate
+execution in generated runtimes, see {doc}`runtime-cli`.
 
 The `conda-ship` package can also make `conda ship` available as a
 conda-style shortcut for this CLI. See {doc}`conda-plugin`.

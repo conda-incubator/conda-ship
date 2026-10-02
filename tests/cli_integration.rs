@@ -491,7 +491,56 @@ fn test_update_package_replaces_the_stable_runtime_from_a_file_channel() {
     assert!(!probe(&prefix).status.success());
     assert!(!metadata_path.exists());
     assert_eq!(std::fs::read(&backup_path).unwrap(), original_metadata);
+
+    std::fs::create_dir(&metadata_path).unwrap();
+    let rejected = probe(&prefix);
+    assert!(
+        !rejected.status.success(),
+        "probe accepted a metadata directory"
+    );
+    assert!(rejected.stdout.is_empty());
+    assert!(metadata_path.is_dir());
+    assert_eq!(std::fs::read_dir(&metadata_path).unwrap().count(), 0);
+    assert_eq!(std::fs::read(&backup_path).unwrap(), original_metadata);
+    std::fs::remove_dir(&metadata_path).unwrap();
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&backup_path, &metadata_path).unwrap();
+        let rejected = probe(&prefix);
+        assert!(
+            !rejected.status.success(),
+            "probe followed a metadata symlink"
+        );
+        assert!(rejected.stdout.is_empty());
+        assert_eq!(std::fs::read_link(&metadata_path).unwrap(), backup_path);
+        assert_eq!(std::fs::read(&backup_path).unwrap(), original_metadata);
+        std::fs::remove_file(&metadata_path).unwrap();
+    }
     std::fs::rename(&backup_path, &metadata_path).unwrap();
+
+    std::fs::write(&backup_path, &original_metadata).unwrap();
+    for (field, value) in [
+        ("bootstrap_state", "installing"),
+        ("display_name", "another-runtime"),
+    ] {
+        let mut invalid: serde_json::Value = serde_json::from_slice(&original_metadata).unwrap();
+        invalid[field] = serde_json::json!(value);
+        let invalid_bytes = serde_json::to_vec(&invalid).unwrap();
+        std::fs::write(&metadata_path, &invalid_bytes).unwrap();
+
+        let rejected = probe(&prefix);
+        assert!(!rejected.status.success(), "probe accepted invalid {field}");
+        assert!(rejected.stdout.is_empty());
+        assert_eq!(std::fs::read(&metadata_path).unwrap(), invalid_bytes);
+        assert_eq!(std::fs::read(&backup_path).unwrap(), original_metadata);
+        assert_eq!(
+            std::fs::read(&stable).unwrap(),
+            std::fs::read(&first).unwrap()
+        );
+    }
+    std::fs::remove_file(&backup_path).unwrap();
+    std::fs::write(&metadata_path, &original_metadata).unwrap();
     let absent_prefix = tmp.path().join("uninitialized");
     assert!(!probe(&absent_prefix).status.success());
     assert!(!absent_prefix.exists());

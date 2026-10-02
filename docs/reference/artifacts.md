@@ -1,10 +1,10 @@
-# Artifact reference
+# Artifact Reference
 
-Every `cs build` writes the stamped runtime binary and its metadata files.
-Downstream signing and attestation workflows run after conda-ship writes these
-files.
+Every `cs build` writes a runtime plus metadata files. The runtime
+is the final stamped binary artifact. Downstream signing and attestation
+workflows run after conda-ship writes these files.
 
-## conda-ship release assets
+## conda-ship Release Assets
 
 Tagged conda-ship releases publish the builder assets that the GitHub Action
 downloads:
@@ -39,7 +39,7 @@ filenames also include `.exe`.
 For the difference between `runtime-name` and `artifact-name`, see
 {doc}`names`.
 
-## Runtime update packages
+## Runtime Update Packages
 
 `cs package-update` writes a dependency-free native `.conda` package from a
 finalized update-enabled `online` or `embedded` runtime. Run it separately
@@ -60,7 +60,7 @@ The command refuses to overwrite an existing output. Its `--json` result
 reports SHA256 and size values for both the package and finalized executable
 payload. Channel indexing and upload remain downstream release operations.
 
-## Bundle contents
+## Bundle Contents
 
 Bundles are a transport for the conda package archives already named in the
 runtime lock. They are not channel mirrors and do not use a `linux-64/` or
@@ -76,7 +76,7 @@ bundles are stricter because they are extracted from a tar archive: every entry
 must be a top-level regular `.conda` or `.tar.bz2` file. Directory entries,
 nested paths, symbolic links, hard links, and other file types are rejected.
 
-## Metadata files
+## Metadata Files
 
 For an `online` build with runtime `demo`, conda-ship stages:
 
@@ -113,8 +113,8 @@ derived runtime lock. Package components include the exact version, build,
 subdir, channel, filename, download URL, SHA256 and MD5 hashes, and license
 value when those fields are available. Direct dependency edges come from the
 solved package records. Dependency sets containing conditional or unparseable
-MatchSpecs are marked `unknown` because the runtime lock cannot establish
-those relationships.
+MatchSpecs are marked `unknown` rather than inventing relationships that the
+runtime lock cannot prove.
 
 Channel and remote download URLs are sanitized before they are written. URL
 credentials, Anaconda `/t/<token>` path segments, queries, and fragments are
@@ -172,7 +172,7 @@ not edit the staged SBOM in place because its checksum is recorded in
 time is recorded in UTC. Rebuild the SBOM whenever the runtime or package set
 changes.
 
-## Stamped runtime data
+## Stamped Runtime Data
 
 conda-ship stamps runtime data into every staged runtime. On macOS, it extends
 the Mach-O `__LINKEDIT` segment over an appended block before native signing.
@@ -258,7 +258,7 @@ The info JSON contains:
 - package count
 - SHA256 checksums
 
-## Package list
+## Package List
 
 The package list is tab-separated and contains:
 

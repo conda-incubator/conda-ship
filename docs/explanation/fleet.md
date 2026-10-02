@@ -1,4 +1,4 @@
-# Fleet concepts
+# Fleet Concepts
 
 Fleet is an experimental Rust API inside the `conda-ship` crate. It is enabled
 only with the non-default Cargo feature `fleet`.
@@ -9,8 +9,9 @@ original arguments to its configured delegate. The delegate can be `conda` or
 any other installed entry point. The artifact does not reserve bootstrap,
 status, repair, update, or uninstall commands.
 
-Fleet supports callers that need several locked prefixes. It does not create a
-new conda-ship distribution or CLI. Each runtime is installed under:
+Fleet is an optional Rust API for callers that need several locked prefixes. It
+does not create a new conda-ship distribution or CLI. Each runtime is installed
+under:
 
 ```text
 install_root/<id>
@@ -22,7 +23,7 @@ The runtime id also selects its conda-ship metadata file:
 install_root/<id>/.<id>.json
 ```
 
-## Install and recovery
+## Install And Recovery
 
 Fleet and stamped artifacts use the same adjacent process lock, installing
 marker, delegate validation, reinstall code, and final metadata rename that
@@ -35,7 +36,7 @@ in-place full-lock reinstall of a prefix already owned by the same Fleet runtime
 id. It does not recursively replace the prefix. Recursive deletion happens only
 through an explicit `Fleet::remove` call.
 
-## Prefix metadata
+## Prefix Metadata
 
 Fleet has no separate registry database. `Fleet::list()` scans direct children
 of the install root. `Fleet::get(id)` validates the runtime's regular metadata
@@ -48,7 +49,7 @@ not turned into an implicit `.condarc`.
 `RuntimeSpec` is not a user-facing catalog format. Callers construct it from
 their catalog or conda-ship stamped runtime data.
 
-## Runtime configuration
+## Runtime Configuration
 
 The caller decides whether each runtime receives:
 
@@ -64,7 +65,7 @@ before package installation begins.
 `.installer.info` is distribution provenance. It is not launcher ownership
 evidence.
 
-## Commands and launchers
+## Commands And Launchers
 
 Fleet returns executable paths and prefix-local PATH entries. It does not
 set `CONDA_PREFIX`, `CONDA_ROOT_PREFIX`, `CONDA_DEFAULT_ENV`,
@@ -97,7 +98,7 @@ The caller still handles:
 - update, uninstall, and migration workflows
 - launcher installation and external package-manager guidance
 
-## Experimental status
+## Experimental Status
 
 The API is experimental. Pin a repository revision and enable the feature
 explicitly:

@@ -1,4 +1,4 @@
-# Fleet API reference
+# Fleet API Reference
 
 Fleet is an experimental Rust API for downstream orchestrators that manage
 multiple locked prefixes. Enable it explicitly:
@@ -19,7 +19,7 @@ Fleet does not solve environments, publish catalogs, add a runtime command
 namespace, write global launchers, or edit shell startup files. Stamped runtime
 artifacts remain conda-ship's primary build output.
 
-## Core types
+## Core Types
 
 `Fleet::new` selects the install root:
 
@@ -78,7 +78,7 @@ three default to disabled and none of them are inferred from the lock.
 Channels from the default lock environment are recorded separately as
 provenance. They do not become condarc policy.
 
-## Install and recovery
+## Install And Recovery
 
 Install a selected lock with:
 
@@ -122,7 +122,7 @@ rechecks them after package installation, then rewrites only the outputs enabled
 by the new `RuntimeSpec`. This removes files when an option changes from enabled
 to disabled.
 
-## List, get, and remove
+## List, Get, And Remove
 
 ```rust
 let runtimes = fleet.list()?;
@@ -140,7 +140,7 @@ same mutation lock and removes only an empty directory, a prefix with matching
 ready metadata, or an incomplete prefix with a matching installing marker. A
 metadata symlink is rejected.
 
-## Installed runtime and commands
+## Installed Runtime And Commands
 
 `InstalledRuntime` contains the id, version, prefix, explicit delegate,
 lockfile channels, lock SHA256, and requested specs.
@@ -156,7 +156,7 @@ let path_entries = runtime.path_entries();
 Fleet does not set conda activation variables. Callers can prepend the returned
 entries to the existing child PATH just as a stamped runtime does.
 
-## Shim plans and launcher ownership
+## Shim Plans And Launcher Ownership
 
 Fleet can return a shim plan:
 
@@ -171,7 +171,7 @@ file contents, overwrite checks, PATH setup, and removal.
 Launchers created by Fleet callers are externally managed. The downstream
 orchestrator owns their update and removal policy.
 
-## Cache, bundle, and offline behavior
+## Cache, Bundle, And Offline Behavior
 
 All Fleet runtimes use rattler's standard shared package cache. Installing a
 second runtime can reuse package archives and extracted cache entries already

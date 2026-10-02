@@ -1,7 +1,7 @@
-# Build in GitHub Actions
+# Build In GitHub Actions
 
-Use the composite action to build runtime release artifacts in a downstream
-distribution repository's CI.
+Use the composite action when a downstream distribution repository wants
+conda-ship to build release artifacts in CI.
 
 The action reads committed project input, downloads released conda-ship builder
 assets, verifies them, runs `cs build --dry-run`, and then runs `cs build`.
@@ -10,7 +10,7 @@ It does not solve, generate a manifest, or refresh a lockfile.
 For a full guided workflow, see {doc}`../tutorials/github-action-runtime`.
 For exact inputs and outputs, see {doc}`../reference/github-action`.
 
-## Prepare the repository
+## Prepare The Repository
 
 Commit one supported manifest and lockfile pair:
 
@@ -26,7 +26,7 @@ cs inspect
 cs build --dry-run
 ```
 
-## Add a build job
+## Add A Build Job
 
 Pin the action source to a full conda-ship release commit SHA and pass the
 matching conda-ship release through `conda-ship-version`:
@@ -53,7 +53,7 @@ When the action is invoked by an exact release tag, `conda-ship-version` can be
 omitted for backwards compatibility. Release workflows should prefer full
 commit SHA pins.
 
-## Build from a subdirectory
+## Build From A Subdirectory
 
 When the downstream manifest lives below the repository root, set `root`:
 
@@ -67,7 +67,7 @@ When the downstream manifest lives below the repository root, set `root`:
 
 Update and commit the lockfile before running release builds.
 
-## Choose layout or metadata at release time
+## Choose Layout Or Metadata At Release Time
 
 Keep package and channel choices in the manifest and lockfile. Use action inputs
 for release-job metadata that may vary across jobs:
@@ -85,10 +85,10 @@ for release-job metadata that may vary across jobs:
 The action passes non-empty inputs to `cs build --dry-run`, so invalid values
 fail in conda-ship before artifact files are written.
 
-## Matrix builds
+## Matrix Builds
 
-Use a matrix for the operating system, layout, and release-channel metadata
-when a release needs platform-specific outputs:
+Matrix the operating system, layout, and release-channel metadata when a release
+needs platform-specific outputs:
 
 ```yaml
 strategy:
@@ -121,11 +121,11 @@ steps:
 
 Each job emits an asset name qualified with the runner target triple.
 
-## Publish or attest outputs
+## Publish Or Attest Outputs
 
-Upload artifacts from `dist-path`. It contains the runtime, optional external
-bundle, `.info.json`, `.runtime.lock`, `.packages.txt`, `.cdx.json`, and `.sha256`
-files for that build.
+Use `dist-path` as the source of truth for artifact uploads. It contains the
+runtime, optional external bundle, `.info.json`, `.runtime.lock`,
+`.packages.txt`, `.cdx.json`, and `.sha256` files for that build.
 
 For release workflows, attest the complete `dist-path` before publishing or
 wrapping the files. See {doc}`verify-release-artifacts` for the GitHub Actions

@@ -1,8 +1,9 @@
-# Source locks and runtime locks
+# Source Locks And Runtime Locks
 
-conda-ship uses two kinds of lockfiles with different owners and purposes.
+conda-ship uses two kinds of lockfiles. They have different owners and
+different jobs.
 
-## Source lock
+## Source Lock
 
 A source lock is the lockfile owned by the project environment tool:
 
@@ -16,10 +17,11 @@ test environments, multiple features, and package records for several platforms.
 conda-ship does not replace the solver that created this lockfile. It reads the
 lockfile after conda-workspaces or Pixi has solved it.
 
-## Runtime lock
+## Runtime Lock
 
-conda-ship derives a runtime lock as build output by reading the selected source
-environment:
+A runtime lock is build output derived by conda-ship.
+
+conda-ship reads the selected source environment:
 
 ```toml
 [tool.conda-ship]
@@ -38,12 +40,13 @@ Then it:
 7. writes `dist/RUNTIME.cdx.json` from the target platform's resolved package
    graph
 
-Generated runtimes use the runtime lock to install conda packages during
-bootstrap. conda-ship rejects PyPI packages in the selected environment because
-they would leave the runtime lock incomplete. PyPI packages in unselected
-environments do not prevent a build.
+conda-ship installs conda packages during bootstrap. It rejects PyPI packages in
+the selected environment instead of producing an incomplete runtime lock.
+PyPI packages in unselected environments do not prevent a build.
 
-## Why the split exists
+The runtime lock is the lock the generated runtime uses during bootstrap.
+
+## Why The Split Exists
 
 The source lock answers:
 

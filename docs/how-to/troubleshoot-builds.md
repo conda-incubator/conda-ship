@@ -1,7 +1,9 @@
-# Troubleshoot builds
+# Troubleshoot Builds
 
-When `cs inspect`, `cs build --dry-run`, `cs build`, or the GitHub Action fails,
-start with the local preflight:
+Use this guide when `cs inspect`, `cs build --dry-run`, `cs build`, or the
+GitHub Action fails.
+
+Start with the local preflight:
 
 ```bash
 cs inspect
@@ -10,9 +12,9 @@ cs build --dry-run
 
 The GitHub Action runs the same dry run before it writes artifacts.
 
-## Project root not found
+## Project Root Not Found
 
-Error:
+Error shape:
 
 ```text
 could not find project root containing conda.toml, pixi.toml, or supported pyproject.toml
@@ -28,9 +30,9 @@ For `pyproject.toml`, add a nonempty `[tool.conda.workspace]` or
 `[tool.pixi.workspace]` table. `[tool.conda-ship]` alone is build policy and does
 not define the source workspace. See {doc}`../reference/configuration`.
 
-## Lockfile not found
+## Lockfile Not Found
 
-Error:
+Error shape:
 
 ```text
 lockfile not found at conda.lock
@@ -50,9 +52,9 @@ pixi lock
 
 Commit the lockfile before using the GitHub Action.
 
-## Source environment missing
+## Source Environment Missing
 
-Error:
+Error shape:
 
 ```text
 source environment is required
@@ -68,9 +70,9 @@ source-environment = "ship"
 conda-ship does not fall back to a default environment because that can
 accidentally ship development or test dependencies.
 
-## Runtime version is missing
+## Runtime Version Is Missing
 
-Error:
+Error shape:
 
 ```text
 runtime version is required
@@ -95,9 +97,9 @@ runtime-version = { from = "project-metadata" }
 When using the standalone `cs` binary directly, pass `--runtime-version` with a
 concrete value instead.
 
-## Source environment not in the lockfile
+## Source Environment Not In The Lockfile
 
-Error:
+Error shape:
 
 ```text
 source environment "ship" not found
@@ -109,9 +111,9 @@ Fix:
 - refresh the matching lockfile
 - rerun `cs inspect`
 
-## Runtime template not found
+## Runtime Template Not Found
 
-Error:
+Error shape:
 
 ```text
 runtime template not found
@@ -128,9 +130,9 @@ Fix by either:
 
 Cross-builds require an explicit template for the requested target.
 
-## Bundle build missing SHA256 data
+## Bundle Build Missing SHA256 Data
 
-Error:
+Error shape:
 
 ```text
 cannot bundle packages without SHA256 hashes
@@ -140,7 +142,7 @@ External and embedded layouts need package hashes so package archives can be
 verified. Refresh the source lockfile with a tool/version that records SHA256
 metadata for the selected packages.
 
-## Invalid runtime, delegate, target, or install method
+## Invalid Runtime, Delegate, Target, Or Install Method
 
 Identifier-like values must start with an ASCII letter or digit and may contain
 only ASCII letters, digits, dots, dashes, and underscores.
@@ -156,9 +158,9 @@ homebrew
 
 Avoid path-like values such as `demo/runtime` or shell-like values with spaces.
 
-## Runtime refuses an existing prefix
+## Runtime Refuses An Existing Prefix
 
-Error:
+Error shape:
 
 ```text
 refusing to use unmanaged install path

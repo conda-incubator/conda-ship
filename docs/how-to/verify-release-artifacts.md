@@ -1,11 +1,14 @@
-# Verify release artifacts
+# Verify Release Artifacts
 
-Before publishing or packaging conda-ship runtime artifacts:
+Use this guide when you need to check conda-ship-built artifacts before
+publishing or wrapping them.
+
+Verification has two layers:
 
 - verify the conda-ship tools used by the build
 - verify the runtime artifacts produced by the build
 
-## Verify conda-ship release tools in GitHub Actions
+## Verify conda-ship Release Tools In GitHub Actions
 
 The composite action downloads `cs`, `cs-template`, and `SHA256SUMS`
 from a tagged conda-ship release. It verifies GitHub artifact attestations and
@@ -34,10 +37,11 @@ explicitly, such as `conda-ship-version: "0.9.0"`. See the
 Self-hosted runners must provide the GitHub CLI because the action calls
 `gh attestation verify`.
 
-Published conda-ship releases are immutable. If a released asset set is wrong,
-use a newer release tag.
+conda-ship releases are immutable after publication. If a released asset set is
+wrong, use a newer release tag instead of expecting the existing tag or files to
+change.
 
-## Verify staged checksums
+## Verify Staged Checksums
 
 Every `cs build` writes a `.sha256` file next to the runtime and metadata:
 
@@ -55,7 +59,7 @@ Run the check from the artifact directory because the checksum file records
 filenames relative to that directory. It covers the staged runtime, runtime
 lock, package list, CycloneDX SBOM, info JSON, and external bundle when present.
 
-## Inspect artifact metadata
+## Inspect Artifact Metadata
 
 Open the `.info.json` file:
 
@@ -79,10 +83,10 @@ Check:
 - `package_count`
 - `checksums`
 
-This file is for release tooling and package-manager wrappers. It describes
-what conda-ship wrote. It does not describe later changes by external installers.
+This file is intended for release tooling and package-manager wrappers. It
+describes what conda-ship wrote, not what an external installer later did.
 
-## Inspect the SBOM
+## Inspect The SBOM
 
 Open the `.cdx.json` file:
 
@@ -105,7 +109,7 @@ appear in `dependencies`. The composition is intentionally `incomplete`
 because conda metadata cannot account for every system, vendored, or statically
 linked component.
 
-## Inspect the runtime lock
+## Inspect The Runtime Lock
 
 The staged `.runtime.lock` is the lock the runtime will use during bootstrap.
 It should be reproducible from the committed source lockfile and
@@ -120,7 +124,7 @@ Use it to answer release questions such as:
 Do not edit it by hand. Change the source manifest or source lockfile instead,
 then rebuild.
 
-## Verify bundle contents
+## Verify Bundle Contents
 
 For external bundles, extract into a temporary directory and check that it
 contains only top-level package archives:
@@ -134,7 +138,7 @@ find /tmp/demo-bundle -maxdepth 2 -type f
 The runtime verifies package archive hashes against the runtime lock before
 installing. Embedded bundles are verified by the runtime before extraction.
 
-## Preserve the build record before signing
+## Preserve The Build Record Before Signing
 
 conda-ship gives native macOS builds a temporary ad hoc signature so the
 stamped Mach-O remains valid. It does not apply a downstream Developer ID or
@@ -174,7 +178,7 @@ That attests the runtime binary, `.runtime.lock`, `.packages.txt`, `.cdx.json`,
 downstream workflow. Signing the runtime afterward changes its digest, so do
 not present these sidecars as a checksum set for the signed executable.
 
-## Sign and verify a finalized runtime
+## Sign And Verify A Finalized Runtime
 
 Sign a copy so the original build record remains available. On macOS, replace
 the ad hoc signature with the downstream identity and policy:
@@ -226,7 +230,7 @@ Run the downstream distribution's runtime smoke test against the finalized
 file after native signature verification. Platform signature verification and
 runtime-data checksum verification are separate requirements.
 
-## Attest the finalized bytes
+## Attest The Finalized Bytes
 
 Generate a new checksum or manifest for the signed executable. Do not overwrite
 the original conda-ship `.sha256` or `.info.json`. For example, on macOS:
@@ -252,7 +256,7 @@ gh attestation verify final/demo \
   --signer-workflow OWNER/REPO/.github/workflows/release.yml
 ```
 
-Downstream releases can also use:
+Good downstream controls include:
 
 - GitHub Release artifact attestations
 - GitHub release immutability

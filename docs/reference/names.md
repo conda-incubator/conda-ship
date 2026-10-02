@@ -1,11 +1,11 @@
-# Runtime and artifact names
+# Runtime And Artifact Names
 
 conda-ship uses several names because one build has several audiences: users
 run a command, release jobs upload files, and the generated runtime manages an
 install location. Keep these names the same unless a downstream distribution has
 a reason to separate them.
 
-## Quick choice
+## Quick Choice
 
 For most projects, configure the normal build policy and let `runtime-name`
 drive the other name defaults:
@@ -52,7 +52,7 @@ This keeps the user-facing runtime identity `cx`, but installs below the
 install scheme path for `express`, such as `~/.conda/express` with the default
 `conda-home` scheme.
 
-## Name fields
+## Name Fields
 
 `runtime-name`
 : Base runtime identity and default artifact name. This is the name users see
@@ -78,7 +78,7 @@ install scheme path for `express`, such as `~/.conda/express` with the default
   See {doc}`../explanation/install-locations-and-ownership` for lifecycle and
   security details.
 
-## Related fields
+## Related Fields
 
 `delegate-executable`
 : Executable inside the managed prefix that receives every runtime argument.
@@ -94,11 +94,11 @@ install scheme path for `express`, such as `~/.conda/express` with the default
 : Package manager or installer metadata. It is not part of the install-location
   controls.
 
-## Runtime version
+## Runtime Version
 
-`runtime-version` and `runtime-name` are independent fields in the stamped
-metadata. The version is not derived from `runtime-name`, and changing either
-field leaves the other unchanged.
+`runtime-version` is related to `runtime-name` only because both are stamped
+runtime metadata. It is not derived from `runtime-name`, and changing one does
+not change the other.
 
 Use `runtime-name` to choose the runtime identity and default file stem. Use
 `runtime-version` to choose the version recorded in runtime and prefix ownership

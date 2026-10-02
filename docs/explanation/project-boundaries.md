@@ -1,10 +1,12 @@
-# Project scope
+# Project Scope
 
-conda-ship provides the builder and runtime code for ready-to-run conda
-runtimes. Downstream projects choose the packages, settings, and release
-process for their distributions. conda-ship itself is not a conda distribution.
+conda-ship builds ready-to-run conda runtimes. It is not itself a conda
+distribution.
 
-## Ownership at a glance
+conda-ship provides the builder and runtime code. Downstream projects choose
+the packages, settings, and release process for their distributions.
+
+## Ownership At A Glance
 
 ::::{grid} 1 1 2 2
 :gutter: 3
@@ -23,7 +25,7 @@ documentation.
 
 ::::
 
-## What conda-ship owns
+## What conda-ship Owns
 
 conda-ship provides the reusable build and runtime code:
 
@@ -54,7 +56,7 @@ choose catalogs, delegates, condarc contents, frozen-base policy, installer
 provenance, user-facing command names, global PATH policy, or shim filesystem
 writes.
 
-## What downstream distributions own
+## What Downstream Distributions Own
 
 Downstream projects decide what their users get:
 
@@ -101,7 +103,7 @@ artifact name. The package set remains conda-express project input, and
 conda-ship does not hard-code those choices. Its own scope page is
 {external+conda-express:doc}`Project scope <scope>`.
 
-## Relationship to other tools
+## Relationship To Other Tools
 
 conda-ship complements other conda ecosystem tools:
 
@@ -118,6 +120,6 @@ conda-ship does not produce installer-generator output such as `.sh`, `.pkg`, or
 `.msi`. Those formats can wrap conda-ship-built runtimes when a downstream
 distribution needs them.
 
-The {external+conda-express:doc}`conda-express docs <index>` describe `cx` and
-`cxz` as products and provide a concrete example of a downstream distribution.
-The conda-ship docs explain how to build runtimes like them.
+The {external+conda-express:doc}`conda-express docs <index>` are useful as a
+concrete example of a downstream distribution. They describe `cx` and `cxz` as
+products. conda-ship docs describe how to build runtimes like them.

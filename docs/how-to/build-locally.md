@@ -1,10 +1,11 @@
-# Build locally
+# Build Locally
 
 Use local builds while iterating on runtime package sets, channel choices, or
 conda-ship runtime behavior.
 
-Packaged builds automatically find the runtime template installed next to `cs`.
-When your manifest contains `[tool.conda-ship].runtime-name`, build with:
+Packaged local builds find the runtime template installed next to `cs`
+automatically. When your manifest contains `[tool.conda-ship].runtime-name`, a
+normal build is:
 
 ```bash
 cs build
@@ -24,9 +25,9 @@ If you are changing a downstream distribution such as conda-express, keep the
 package-set decision in that downstream project, then reproduce the build with
 the `cs` CLI or the GitHub Action.
 
-## Check the runtime input
+## Check The Runtime Input
 
-To check the selected source environment before building, run:
+When you want to check the selected source environment before building, run:
 
 ```bash
 cs inspect
@@ -71,8 +72,8 @@ CI can use JSON output for machine-readable preflight checks:
 cs inspect --json
 ```
 
-Use `build --dry-run` to validate artifact names, template selection, install
-settings, and bundle suitability without writing files:
+Use `build --dry-run` when you want to validate artifact names, template
+selection, install settings, and bundle suitability without writing files:
 
 ```bash
 cs build --dry-run
@@ -84,7 +85,7 @@ cs build --dry-run
 Preview runtime metadata and artifact names without writing release files.
 ```
 
-## Build a runtime
+## Build A Runtime
 
 Set `source-environment` in `[tool.conda-ship]`. Also provide a runtime name,
 delegate, and version in the manifest or through CLI flags. See the
@@ -107,7 +108,7 @@ Pass `--template` when you need an explicit release template asset, custom
 packaging path, or cross-build template. conda-ship does not search `PATH` for
 templates.
 
-## Run a smoke test
+## Run A Smoke Test
 
 Use `cs run` to build and immediately execute the staged runtime:
 
@@ -121,7 +122,7 @@ cs run \
 after `--` is passed unchanged to the configured delegate after automatic
 bootstrap.
 
-## Build for another target
+## Build For Another Target
 
 Pass a target triple, an artifact label, and a matching prebuilt template:
 
@@ -138,14 +139,14 @@ The target label is appended to staged artifact names and metadata files.
 `--target` selects the template architecture and does not infer `--platform`,
 which selects the conda packages for the runtime.
 
-## Keep names distribution-specific
+## Keep Names Distribution-Specific
 
 Use a runtime name owned by the distribution you are building. For example,
 conda-express uses `cx` as its runtime name and can set
 `artifact-name = "cxz"` for a release artifact. A different distribution uses a
 different `[tool.conda-ship].runtime-name` value or the `--runtime-name` override.
 
-## Measure test coverage
+## Measure Test Coverage
 
 From a conda-ship source checkout, run:
 
@@ -176,9 +177,10 @@ On Unix, a runtime replaces itself with its delegate using `exec`. That can
 prevent LLVM coverage from saving the runtime's counters. Integration tests
 also check installed files, delegate output, and exit status directly.
 
-## Run release checks
+## Run Release Checks
 
-Before publishing a conda-ship release, run these local checks:
+Before publishing a conda-ship release, run the same local checks used for
+the release pass:
 
 ```bash
 pixi run test

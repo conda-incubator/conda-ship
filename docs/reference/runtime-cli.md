@@ -1,4 +1,4 @@
-# Generated runtime reference
+# Generated Runtime Reference
 
 Every conda-ship artifact is a stamped copy of the generic runtime template. In
 this page, `RUNTIME` stands for the staged executable name and `DELEGATE`
@@ -9,7 +9,7 @@ Normal command arguments belong to the delegate. When executable updates are
 configured, a downstream transaction coordinator can also invoke an update
 helper through environment variables.
 
-## First invocation
+## First Invocation
 
 When the managed prefix is absent, the first invocation automatically installs
 the stamped package set and then executes the delegate with the original
@@ -53,7 +53,7 @@ every locked package through Rattler's reinstall path so post-link scripts run
 again. It does not delete the prefix, named environments, or unrelated paths.
 An unknown non-empty prefix is still refused.
 
-## Delegate execution
+## Delegate Execution
 
 After the prefix is available, every argument belongs to the delegate. The
 runtime does not reserve or rewrite any of these names:
@@ -89,7 +89,7 @@ Use `conda doctor` and its supported fixes to diagnose and repair an installed
 prefix. Use the commands supplied by conda-self for installer snapshots and
 self-management when the distribution includes that plugin.
 
-## Executable updates
+## Executable Updates
 
 Executable updates are disabled unless the runtime was built with
 `[tool.conda-ship.update]`. Runtimes without that table keep the normal
@@ -117,7 +117,7 @@ the delegate. A directly owned executable that changes outside the coordinated
 flow is rejected. An externally owned executable can be reconciled when its
 stamp and recorded identity are valid.
 
-### Resolution and verification
+### Resolution And Verification
 
 The runtime reads native `repodata.json` for the current platform and selects
 the newest `.conda` package whose `(version, build number)` pair sorts after the
@@ -141,7 +141,7 @@ checks require cached repodata and offline staging requires the selected
 package content to be cached. A `file://` channel reads local repodata and
 packages directly.
 
-## Version-one coordinator API
+## Version-One Coordinator API
 
 Downstream coordinators, installers, and notification hooks invoke the stamped
 executable as a child process. Set `CONDA_SHIP_PREFIX` to the managed prefix
@@ -154,7 +154,7 @@ initialization. The coordinator must hold it through check, stage, the inner
 transaction, and apply. Check, stage, and apply fail when the lock is not held.
 The advisory probe does not require this lock.
 
-### Record installation
+### Record Installation
 
 An installer or delivery detector records how this copy of the executable is
 managed:
@@ -352,7 +352,7 @@ All persistent update and recovery state remains inside the existing
 `.RUNTIME_NAME.json` prefix metadata file. The helper introduces no daemon,
 service, receipt, or second metadata record.
 
-## Windows deferred replacement
+## Windows Deferred Replacement
 
 Windows cannot replace the executable while the current process is using it.
 Apply preserves a verified copy of the old executable as a detached replacement
@@ -364,7 +364,7 @@ is verified. The next invocation completes metadata reconciliation and cleanup.
 If the worker is interrupted or times out, the old executable remains usable
 and a later invocation retries recovery.
 
-## Bootstrap controls
+## Bootstrap Controls
 
 `CONDA_SHIP_PREFIX` is the universal managed-prefix override. It takes
 precedence over a runtime-specific prefix variable. Bundle and bootstrap

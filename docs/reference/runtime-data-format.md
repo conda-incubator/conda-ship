@@ -1,7 +1,8 @@
-# Runtime data format
+# Runtime Data Format
 
 conda-ship stamps runtime data onto a copy of the generic runtime template.
-Only conda-ship should write this format.
+This page describes the stored data and how runtimes read it. Only conda-ship
+should write this format.
 
 ```{important}
 Treat the stamped runtime data as private executable metadata. Release tooling
@@ -55,7 +56,7 @@ through their SHA256 values. A second checksum-valid stamp in mutable signature
 or certificate padding cannot replace it. Malformed platform structures are
 rejected rather than falling back to a different footer.
 
-## Header fields
+## Header Fields
 
 The stamped header records:
 
@@ -141,7 +142,7 @@ runtime data:
 
 If the footer or checksums are invalid, the runtime refuses to start.
 
-## Compatibility notes
+## Compatibility Notes
 
 Generated runtimes are expected to read the format written by the same
 conda-ship release family. Downstream tools should treat the staged runtime as

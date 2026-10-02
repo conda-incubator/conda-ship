@@ -1,9 +1,11 @@
-# Choose an artifact layout
+# Choose An Artifact Layout
 
-Choose between `online`, `external`, and `embedded` builds based on how you
-will distribute package archives. The layout does not change the package set.
-All layouts use the same runtime lock derived from the selected source
-environment.
+Use this guide when you need to choose between `online`, `external`, and
+`embedded` builds.
+
+The layout changes how package archives travel with the runtime. It does not
+change the package set. All layouts use the same runtime lock derived from the
+selected source environment.
 
 ::::{grid} 1 1 3 3
 :gutter: 3
@@ -26,7 +28,7 @@ One larger runtime file. Carries package archives for offline bootstrap.
 
 ::::
 
-## Use `online` for small release assets
+## Use `online` For Small Release Assets
 
 Choose `online` when users can download conda package archives during
 bootstrap:
@@ -45,7 +47,7 @@ Bootstrap downloads packages from the channels recorded in the lock. This keeps
 the runtime artifact small and is the best default for GitHub Releases,
 Homebrew, and package-manager wrappers that expect network access.
 
-## Use `external` for split binary and bundle delivery
+## Use `external` For Split Binary And Bundle Delivery
 
 Choose `external` when you want the runtime and package archives as separate
 files:
@@ -78,7 +80,7 @@ replacing non-alphanumeric characters with underscores.
 The external bundle is not a conda channel mirror. It is a flat set of `.conda`
 and `.tar.bz2` archives named in the runtime lock.
 
-## Use `embedded` for one larger offline runtime
+## Use `embedded` For One Larger Offline Runtime
 
 Choose `embedded` when a single runtime binary must carry the package archives:
 
@@ -106,7 +108,7 @@ not want a separate bundle file. The tradeoff is a larger binary, slower builds,
 and additional temporary storage during bootstrap. Budget for a verified copy
 of the compressed embedded bundle in addition to the extracted packages.
 
-## Decision table
+## Decision Table
 
 | Need | Layout |
 | --- | --- |
@@ -116,7 +118,7 @@ of the compressed embedded bundle in addition to the extracted packages.
 | Installer can unpack a bundle next to the runtime | `external` |
 | One file should bootstrap offline | `embedded` |
 
-## Keep the layout out of the solve
+## Keep The Layout Out Of The Solve
 
 Do not create separate source environments only to change layout. Keep package
 and channel settings in the source manifest, commit the lockfile, and override
@@ -127,7 +129,7 @@ cs build --artifact-layout online
 cs build --artifact-layout embedded
 ```
 
-In GitHub Actions, use a layout matrix:
+In GitHub Actions, matrix the layout:
 
 ```yaml
 strategy:

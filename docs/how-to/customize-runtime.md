@@ -1,7 +1,8 @@
-# Customize a runtime
+# Customize A Runtime
 
-Configure a conda-ship runtime with your own package set, runtime name, delegate
-executable, install location, channels, or documentation URL.
+Use this guide when you want a conda-ship-built runtime with your own package
+set, runtime name, delegate executable, install location, channels, or
+documentation URL.
 
 Choose a runtime name for your distribution. For example,
 [conda-express](https://jezdez.github.io/conda-express/) uses conda-ship to
@@ -10,7 +11,7 @@ publish `cx` and `cxz`.
 For exact field definitions and alternate manifest formats, see
 {doc}`../reference/configuration`.
 
-## Choose runtime identity
+## Choose Runtime Identity
 
 Set `runtime-name` to the command and base identity users should see:
 
@@ -31,7 +32,7 @@ runtime-name = "demo"
 artifact-name = "demo-offline"
 ```
 
-## Choose an install location
+## Choose An Install Location
 
 By default, a runtime uses the `conda-home` install scheme and installs below
 `~/.conda/RUNTIME`, where `RUNTIME` is the runtime name. Use `install-name`
@@ -53,7 +54,8 @@ Use `install-scheme = "user-data"` when the runtime should install below the
 platform user data directory instead of `~/.conda`.
 
 If a package manager owns the runtime binary, set `installer` in the manifest
-or pass it from the release job to record the provider in runtime metadata:
+or pass it from the release job so the provider is retained in runtime
+metadata:
 
 ```toml
 [tool.conda-ship]
@@ -64,9 +66,10 @@ installer = "homebrew"
 During automatic bootstrap, that stamp writes Constructor-compatible
 `.installer.info` JSON into the managed prefix. Its `name`, `version`, and
 `platform` fields identify the stamped distribution, while `type` contains the
-configured `installer` value. These fields do not record launcher ownership.
+configured `installer` value. This metadata identifies the distribution and
+installer. It is not a launcher ownership record.
 
-## Choose runtime packages
+## Choose Runtime Packages
 
 The selected source environment is the complete runtime package set.
 conda-ship does not add or require packages by name. Include the configured
@@ -92,7 +95,7 @@ conda-self = "*"
 conda-ship writes `conda-meta/initial-state.explicit.txt` during bootstrap.
 `conda-self` treats that file as the installer snapshot for reset commands.
 
-## Configure condarc and base freezing
+## Configure Condarc And Base Freezing
 
 By default, conda-ship does not create `.condarc` or freeze the managed base
 prefix. A downstream conda distribution can opt into both behaviors:
@@ -119,7 +122,7 @@ exact text. It does not derive or merge lockfile channels into this file.
 Omitting `condarc-file` leaves `.condarc` alone. Leaving `freeze-base` false
 also preserves any frozen marker created by an installed package.
 
-## Configure build input
+## Configure Build Input
 
 Define packages and channels in your workspace tool's manifest sections.
 Configure the runtime build in `[tool.conda-ship]`.
@@ -166,7 +169,7 @@ For `pyproject.toml` and Pixi layouts, keep the same `[tool.conda-ship]` policy
 but place workspace package data under the tool-specific sections documented in
 {doc}`../reference/configuration`.
 
-## Build locally
+## Build Locally
 
 Build the runtime:
 
@@ -176,7 +179,7 @@ cs build
 
 The staged runtime and metadata files are written to `dist/`.
 
-## Build in GitHub Actions
+## Build In GitHub Actions
 
 For CI builds, commit the manifest and lockfile, then point the composite action
 at that project root:
@@ -192,9 +195,9 @@ at that project root:
 ```
 
 The action does not run `conda workspace lock`, `pixi lock`, or any other solve
-step. It builds release artifacts from the reviewed project files.
+step. That keeps release artifacts tied to reviewed project files.
 
-## Build an embedded variant
+## Build An Embedded Variant
 
 Use the `embedded` layout when you want a larger single binary that carries the
 package archives inside itself:
