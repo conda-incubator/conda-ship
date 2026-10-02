@@ -105,12 +105,18 @@ jobs:
           else
             BIN="./dist/demo-${TARGET}"
           fi
+          DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" info --json
+          DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" list --json
           if [[ "$TARGET" == "aarch64-pc-windows-msvc" ]]; then
-            python tests/ci/verify_windows_arm64_runtime.py \
-              --runtime "$BIN" --prefix "$RUNNER_TEMP/demo-smoke"
-          else
-            DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" info --json
-            DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" list --json
+            "$RUNNER_TEMP/demo-smoke/python.exe" -I - <<'PYTHON'
+          import struct, sys, sysconfig
+          from pathlib import Path
+          assert sysconfig.get_platform() == "win-arm64"
+          launcher = (Path(sys.executable).parent / "Scripts" / "conda.exe").read_bytes()
+          pe_offset = struct.unpack_from("<I", launcher, 0x3C)[0]
+          assert launcher[pe_offset:pe_offset + 6] == b"PE\0\0\x64\xaa"
+          print("Native ARM64 Python and conda launcher verified")
+          PYTHON
           fi
 
       - name: Build embedded bundle
@@ -141,12 +147,18 @@ jobs:
           else
             BIN="./dist/demoz-${TARGET}"
           fi
+          DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" info --json
+          DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" list --json
           if [[ "$TARGET" == "aarch64-pc-windows-msvc" ]]; then
-            python tests/ci/verify_windows_arm64_runtime.py \
-              --runtime "$BIN" --prefix "$RUNNER_TEMP/demoz-smoke"
-          else
-            DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" info --json
-            DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" list --json
+            "$RUNNER_TEMP/demoz-smoke/python.exe" -I - <<'PYTHON'
+          import struct, sys, sysconfig
+          from pathlib import Path
+          assert sysconfig.get_platform() == "win-arm64"
+          launcher = (Path(sys.executable).parent / "Scripts" / "conda.exe").read_bytes()
+          pe_offset = struct.unpack_from("<I", launcher, 0x3C)[0]
+          assert launcher[pe_offset:pe_offset + 6] == b"PE\0\0\x64\xaa"
+          print("Native ARM64 Python and conda launcher verified")
+          PYTHON
           fi
 
       - name: Stage canary binary

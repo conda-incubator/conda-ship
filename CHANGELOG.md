@@ -8,7 +8,7 @@ All notable changes to `conda-ship` are documented here.
 
 - Added end-to-end Windows ARM64 runtime support with conda 26.9 or later.
   CI boots online and embedded runtimes on native ARM64 runners and checks
-  the installed Python, conda launcher, and package platform. The release
+  that the installed Python and conda launcher are ARM64 executables. The release
   workflow also boots runtimes built with the action and candidate binaries.
 
 - Added `v1/probe` for downstream update notifications. It selects native
