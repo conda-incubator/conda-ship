@@ -63,6 +63,8 @@ jobs:
             os: macos-15-intel
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
     env:
       TARGET: ${{ matrix.target }}
       SCCACHE_GHA_ENABLED: "true"
@@ -141,8 +143,13 @@ jobs:
           else
             BIN="./dist/demo-${TARGET}"
           fi
-          DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" info --json
-          DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" list --json
+          if [[ "$TARGET" == "aarch64-pc-windows-msvc" ]]; then
+            python tests/ci/verify_windows_arm64_runtime.py \
+              --runtime "$BIN" --prefix "$RUNNER_TEMP/demo-smoke"
+          else
+            DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" info --json
+            DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" list --json
+          fi
 
       - name: Build embedded bundle
         shell: bash
@@ -206,8 +213,13 @@ jobs:
           else
             BIN="./dist/demoz-${TARGET}"
           fi
-          DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" info --json
-          DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" list --json
+          if [[ "$TARGET" == "aarch64-pc-windows-msvc" ]]; then
+            python tests/ci/verify_windows_arm64_runtime.py \
+              --runtime "$BIN" --prefix "$RUNNER_TEMP/demoz-smoke"
+          else
+            DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" info --json
+            DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" list --json
+          fi
 
   coverage:
     name: Coverage
