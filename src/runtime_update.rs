@@ -1,7 +1,7 @@
 //! Opt-in updates for stamped runtime executables.
 
 use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -27,6 +27,7 @@ pub(crate) const INTERNAL_INSTALLATION_ENV: &str = "CONDA_SHIP_INTERNAL_UPDATE_I
 pub(crate) const INTERNAL_EXECUTABLE_ENV: &str = "CONDA_SHIP_INTERNAL_UPDATE_EXECUTABLE";
 pub(crate) const INTERNAL_INSTRUCTION_ENV: &str = "CONDA_SHIP_INTERNAL_UPDATE_INSTRUCTION";
 pub(crate) const CHECK_ACTION: &str = "v1/check";
+const PROBE_ACTION: &str = "v1/probe";
 pub(crate) const STAGE_ACTION: &str = "v1/stage";
 pub(crate) const APPLY_ACTION: &str = "v1/apply";
 pub(crate) const RECORD_INSTALLATION_ACTION: &str = "v1/record-installation";
@@ -42,8 +43,8 @@ struct SelectedPackage {
 }
 
 #[derive(Debug, Serialize)]
-struct CheckResponse {
-    available: bool,
+struct CheckResponse<T = bool> {
+    available: T,
     current_version: String,
     current_build_number: u64,
     version: Option<String>,
@@ -55,12 +56,122 @@ struct CheckResponse {
     instruction: Option<String>,
 }
 
+impl<T> CheckResponse<T> {
+    fn new(
+        available: T,
+        header: &RuntimeDataHeader,
+        update: &RuntimeUpdateConfig,
+        recorded: &config::ExecutableUpdateMetadata,
+        candidate: Option<&SelectedPackage>,
+    ) -> Self {
+        Self {
+            available,
+            current_version: header.runtime_version.clone(),
+            current_build_number: update.build_number,
+            version: candidate.map(|candidate| candidate.record.package_record.version.to_string()),
+            build_number: candidate.map(|candidate| candidate.record.package_record.build_number),
+            package: candidate.map(|_| update.package.clone()),
+            sha256: candidate.map(|candidate| candidate.sha256.clone()),
+            ownership: recorded.ownership,
+            installation: recorded.installation.clone(),
+            instruction: recorded.instruction.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum ProbeSource {
+    Network,
+    Cache,
+    File,
+}
+
+struct ProbeResult {
+    candidate: Option<SelectedPackage>,
+    source: ProbeSource,
+    cache_age_seconds: Option<u64>,
+}
+
+#[derive(Serialize)]
+struct ProbeResponse {
+    #[serde(flatten)]
+    check: CheckResponse<Option<bool>>,
+    source: Option<ProbeSource>,
+    cache_age_seconds: Option<u64>,
+}
+
+async fn probe(
+    prefix: &Path,
+    header: &RuntimeDataHeader,
+    update: &RuntimeUpdateConfig,
+) -> miette::Result<ProbeResponse> {
+    // The regular metadata reader can restore backup files. Advisory probes must
+    // read only the primary file and leave recovery to coordinated updates.
+    let path = config::metadata_path_for(prefix, &header.metadata_file);
+    let file_type = std::fs::symlink_metadata(&path)
+        .into_diagnostic()
+        .context("failed to inspect runtime metadata")?
+        .file_type();
+    if !file_type.is_file() {
+        return Err(miette::miette!("runtime metadata is not a regular file"));
+    }
+    let metadata: config::PrefixMetadata = serde_json::from_reader(
+        File::open(&path)
+            .into_diagnostic()
+            .context("failed to read runtime metadata")?,
+    )
+    .into_diagnostic()
+    .context("failed to parse runtime metadata")?;
+    config::validate_metadata_ready_for(
+        &metadata,
+        &header.runtime_name,
+        &header.install_name,
+        &header.metadata_file,
+    )?;
+    let recorded = metadata
+        .update
+        .as_ref()
+        .ok_or_else(|| miette::miette!("runtime metadata does not configure executable updates"))?;
+    let result = if metadata.version == header.runtime_version
+        && recorded.build_number == update.build_number
+        && recorded.artifact_name == header.artifact_name
+        && recorded.channel == update.channel
+        && recorded.package == update.package
+    {
+        probe_candidate(
+            prefix,
+            header,
+            update,
+            environment_flag(INTERNAL_OFFLINE_ENV),
+        )
+        .await
+    } else {
+        // An older executable must not advertise updates for a newer prefix.
+        None
+    };
+    Ok(ProbeResponse {
+        check: CheckResponse::new(
+            result.as_ref().map(|result| result.candidate.is_some()),
+            header,
+            update,
+            recorded,
+            result.as_ref().and_then(|result| result.candidate.as_ref()),
+        ),
+        source: result.as_ref().map(|result| result.source),
+        cache_age_seconds: result.and_then(|result| result.cache_age_seconds),
+    })
+}
+
 pub(crate) async fn run_internal_helper(action: &str, prefix: &Path) -> miette::Result<()> {
     let header = &runtime_data::current().header;
     let update = header
         .update
         .as_ref()
         .ok_or_else(|| miette::miette!("this runtime has no executable update configuration"))?;
+    if action == PROBE_ACTION {
+        return write_response(&probe(prefix, header, update).await?);
+    }
     if matches!(action, CHECK_ACTION | STAGE_ACTION | APPLY_ACTION)
         && !executable_update::update_lock_is_held(prefix, &header.metadata_file)?
     {
@@ -114,22 +225,13 @@ pub(crate) async fn run_internal_helper(action: &str, prefix: &Path) -> miette::
                 miette::miette!("runtime metadata does not configure executable updates")
             })?;
             let candidate = resolve_candidate(prefix, header, update, offline).await?;
-            let response = CheckResponse {
-                available: candidate.is_some(),
-                current_version: header.runtime_version.clone(),
-                current_build_number: update.build_number,
-                version: candidate
-                    .as_ref()
-                    .map(|candidate| candidate.record.package_record.version.to_string()),
-                build_number: candidate
-                    .as_ref()
-                    .map(|candidate| candidate.record.package_record.build_number),
-                package: candidate.as_ref().map(|_| update.package.clone()),
-                sha256: candidate.as_ref().map(|candidate| candidate.sha256.clone()),
-                ownership: recorded.ownership,
-                installation: recorded.installation.clone(),
-                instruction: recorded.instruction.clone(),
-            };
+            let response = CheckResponse::new(
+                candidate.is_some(),
+                header,
+                update,
+                recorded,
+                candidate.as_ref(),
+            );
             serde_json::to_writer(std::io::stdout().lock(), &response)
                 .into_diagnostic()
                 .context("failed to write runtime update check")?;
@@ -427,6 +529,15 @@ async fn resolve_candidate(
     update: &RuntimeUpdateConfig,
     offline: bool,
 ) -> miette::Result<Option<SelectedPackage>> {
+    let (channel, platform) = candidate_channel(header, update)?;
+    let repodata = load_repodata(prefix, &channel, platform, offline).await?;
+    select_candidate(header, update, &channel, platform, repodata)
+}
+
+fn candidate_channel(
+    header: &RuntimeDataHeader,
+    update: &RuntimeUpdateConfig,
+) -> miette::Result<(Channel, Platform)> {
     validate_update_config(update)?;
     let platform = Platform::current();
     if !header.platform.is_empty() && header.platform != platform.to_string() {
@@ -444,7 +555,16 @@ async fn resolve_candidate(
     let channel = Channel::from_str(&update.channel, &channel_config)
         .into_diagnostic()
         .context("failed to parse runtime update channel")?;
-    let repodata = load_repodata(prefix, &channel, platform, offline).await?;
+    Ok((channel, platform))
+}
+
+fn select_candidate(
+    header: &RuntimeDataHeader,
+    update: &RuntimeUpdateConfig,
+    channel: &Channel,
+    platform: Platform,
+    repodata: RepoData,
+) -> miette::Result<Option<SelectedPackage>> {
     let package_name = PackageName::from_str(&update.package)
         .into_diagnostic()
         .context("failed to parse runtime update package name")?;
@@ -454,7 +574,7 @@ async fn resolve_candidate(
     let current = (&current_version, update.build_number);
 
     let mut candidates = Vec::new();
-    for record in repodata.into_repo_data_records(&channel) {
+    for record in repodata.into_repo_data_records(channel) {
         if record.package_record.name != package_name
             || !record.identifier.to_string().ends_with(".conda")
             || record.package_record.subdir != platform.to_string()
@@ -497,6 +617,105 @@ async fn resolve_candidate(
             ))
     });
     Ok(candidates.pop())
+}
+
+async fn probe_candidate(
+    prefix: &Path,
+    header: &RuntimeDataHeader,
+    update: &RuntimeUpdateConfig,
+    offline: bool,
+) -> Option<ProbeResult> {
+    let (channel, platform) = candidate_channel(header, update).ok()?;
+    probe_channel(prefix, header, update, &channel, platform, offline).await
+}
+
+async fn probe_channel(
+    prefix: &Path,
+    header: &RuntimeDataHeader,
+    update: &RuntimeUpdateConfig,
+    channel: &Channel,
+    platform: Platform,
+    offline: bool,
+) -> Option<ProbeResult> {
+    let url = channel
+        .base_url
+        .url()
+        .join(&format!("{platform}/repodata.json"))
+        .ok()?;
+    let select = |bytes: &[u8]| {
+        let repodata = parse_probe_repodata(bytes)?;
+        select_candidate(header, update, channel, platform, repodata)
+    };
+    if url.scheme() == "file" {
+        let bytes = std::fs::read(url.to_file_path().ok()?).ok()?;
+        return Some(ProbeResult {
+            candidate: select(&bytes).ok()?,
+            source: ProbeSource::File,
+            cache_age_seconds: None,
+        });
+    }
+    let cache = repodata_cache_path(prefix, url.as_str()).ok()?;
+    if !offline {
+        // Cover authentication and OCI middleware as well as headers and body.
+        let fetched = tokio::time::timeout(http::PROBE_TIMEOUT, async {
+            let response = http::runtime_update_probe_client()?
+                .get(url.clone())
+                .send()
+                .await
+                .into_diagnostic()?
+                .error_for_status()
+                .into_diagnostic()?;
+            validate_response_url(&url, response.url())?;
+            response.bytes().await.into_diagnostic()
+        })
+        .await;
+        if let Ok(Ok(bytes)) = fetched
+            && let Ok(candidate) = select(&bytes)
+        {
+            // A notification must not wait for a cache writer or fail because
+            // the shared cache cannot be written.
+            let _ = try_write_cache_file(&cache, &bytes);
+            return Some(ProbeResult {
+                candidate,
+                source: ProbeSource::Network,
+                cache_age_seconds: None,
+            });
+        }
+    }
+    let mut file = File::open(cache).ok()?;
+    let cache_age_seconds = file
+        .metadata()
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .map(|modified| modified.elapsed().unwrap_or_default().as_secs());
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).ok()?;
+    let repodata = parse_probe_repodata(&bytes).ok()?;
+    Some(ProbeResult {
+        candidate: select_candidate(header, update, channel, platform, repodata).ok()?,
+        source: ProbeSource::Cache,
+        cache_age_seconds,
+    })
+}
+
+fn parse_probe_repodata(bytes: &[u8]) -> miette::Result<RepoData> {
+    #[derive(serde::Deserialize)]
+    struct PackageMaps {
+        packages: Option<serde::de::IgnoredAny>,
+        #[serde(rename = "packages.conda")]
+        conda_packages: Option<serde::de::IgnoredAny>,
+        v3: Option<serde::de::IgnoredAny>,
+    }
+
+    // RepoData defaults absent package maps to empty. An unrelated JSON error
+    // response must not be mistaken for a channel with no newer packages.
+    let maps: PackageMaps = serde_json::from_slice(bytes).into_diagnostic()?;
+    if maps.packages.is_none() && maps.conda_packages.is_none() && maps.v3.is_none() {
+        return Err(miette::miette!(
+            "runtime update repodata has no package map"
+        ));
+    }
+    serde_json::from_slice(bytes).into_diagnostic()
 }
 
 async fn load_repodata(
@@ -802,6 +1021,24 @@ fn repodata_cache_path(prefix: &Path, source: &str) -> miette::Result<PathBuf> {
     Ok(update_cache_dir(prefix)?
         .join("repodata")
         .join(format!("{}.json", hash::hex(&digest))))
+}
+
+fn try_write_cache_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| std::io::Error::other("cache path has no parent"))?;
+    std::fs::create_dir_all(parent)?;
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path.with_extension("lock"))?;
+    FileExt::try_lock(&lock)?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(bytes)?;
+    temporary.persist(path).map_err(|error| error.error)?;
+    Ok(())
 }
 
 fn write_cache_file(path: &Path, bytes: &[u8]) -> miette::Result<()> {
@@ -1170,6 +1407,307 @@ mod tests {
             let _ = std::fs::remove_file(&self.0);
             let _ = std::fs::remove_file(self.0.with_extension("lock"));
         }
+    }
+
+    async fn probe_test_channel(
+        prefix: &Path,
+        header: &RuntimeDataHeader,
+        update: &RuntimeUpdateConfig,
+        offline: bool,
+    ) -> Option<ProbeResult> {
+        // Exercise the loader over local HTTP without weakening the production
+        // requirement that update channels use HTTPS or local files.
+        let channel = Channel::from_str(
+            &update.channel,
+            &ChannelConfig::default_with_root_dir(prefix.to_path_buf()),
+        )
+        .unwrap();
+        probe_channel(
+            prefix,
+            header,
+            update,
+            &channel,
+            Platform::current(),
+            offline,
+        )
+        .await
+    }
+
+    fn probe_cache(prefix: &Path, channel: &str) -> CacheFileGuard {
+        CacheFileGuard(
+            repodata_cache_path(
+                prefix,
+                &format!("{channel}/{}/repodata.json", Platform::current()),
+            )
+            .unwrap(),
+        )
+    }
+
+    fn serve_probe_response(
+        status: u16,
+        bytes: Vec<u8>,
+        body_delay: std::time::Duration,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .unwrap();
+            let mut request = [0_u8; 8192];
+            assert!(stream.read(&mut request).unwrap() > 0);
+            write!(
+                stream,
+                "HTTP/1.1 {status} Response\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                bytes.len()
+            )
+            .unwrap();
+            std::thread::sleep(body_delay);
+            let _ = stream.write_all(&bytes);
+        });
+        (format!("http://{address}/runtime"), server)
+    }
+
+    #[rstest::rstest]
+    #[case("1.0.0.post1", 0)]
+    #[case("1.0.0", 1)]
+    #[tokio::test]
+    async fn probe_file_channel_detects_post_releases_and_higher_builds(
+        #[case] version: &str,
+        #[case] build: u64,
+    ) {
+        let temp = tempfile::TempDir::new().unwrap();
+        let channel = temp.path().join("channel");
+        write_file_channel(
+            &channel,
+            &test_repodata(vec![test_record(
+                version,
+                build,
+                Some(&test_digest(0x22)),
+                Some(42),
+            )]),
+        );
+        let update = test_update(reqwest::Url::from_directory_path(channel).unwrap(), 0);
+        let prefix = temp.path().join("absent-prefix");
+        let result = probe_candidate(&prefix, &test_header("1.0.0"), &update, true)
+            .await
+            .unwrap();
+
+        assert_eq!(result.source, ProbeSource::File);
+        assert_eq!(result.cache_age_seconds, None);
+        let candidate = result.candidate.unwrap();
+        assert_eq!(candidate.record.package_record.version.to_string(), version);
+        assert_eq!(candidate.record.package_record.build_number, build);
+        assert!(!prefix.exists());
+    }
+
+    #[tokio::test]
+    async fn probe_offline_reads_cache_without_contacting_channel() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let channel = format!("http://{}/runtime", listener.local_addr().unwrap());
+        let cache = probe_cache(temp.path(), &channel);
+        let update = test_update(channel, 0);
+        let header = test_header("1.0.0");
+
+        assert!(
+            probe_test_channel(temp.path(), &header, &update, true)
+                .await
+                .is_none()
+        );
+        assert!(!cache.0.exists());
+        write_cache_file(&cache.0, b"not repodata").unwrap();
+        assert!(
+            probe_test_channel(temp.path(), &header, &update, true)
+                .await
+                .is_none()
+        );
+        write_cache_file(&cache.0, &test_repodata(vec![])).unwrap();
+        let modified = std::time::SystemTime::now() - std::time::Duration::from_secs(120);
+        File::options()
+            .write(true)
+            .open(&cache.0)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        let result = probe_test_channel(temp.path(), &header, &update, true)
+            .await
+            .unwrap();
+
+        assert!(result.candidate.is_none());
+        assert_eq!(result.source, ProbeSource::Cache);
+        assert!(result.cache_age_seconds.unwrap() >= 120);
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+
+    #[rstest::rstest]
+    #[case(503, b"unavailable", false)]
+    #[case(200, b"not repodata", false)]
+    #[case(200, b"{}", false)]
+    #[case(200, br#"{"error":"unavailable"}"#, false)]
+    #[case(200, b"", true)]
+    #[tokio::test]
+    async fn probe_failed_network_response_preserves_and_uses_cache(
+        #[case] status: u16,
+        #[case] response: &[u8],
+        #[case] invalid_record: bool,
+    ) {
+        let temp = tempfile::TempDir::new().unwrap();
+        let bytes = if invalid_record {
+            test_repodata(vec![test_record("3.0.0", 0, None, Some(42))])
+        } else {
+            response.to_vec()
+        };
+        let (channel, server) = serve_probe_response(status, bytes, std::time::Duration::ZERO);
+        let cache = probe_cache(temp.path(), &channel);
+        let cached = test_repodata(vec![test_record(
+            "2.0.0",
+            0,
+            Some(&test_digest(0x22)),
+            Some(42),
+        )]);
+        write_cache_file(&cache.0, &cached).unwrap();
+        let result = probe_test_channel(
+            temp.path(),
+            &test_header("1.0.0"),
+            &test_update(channel, 0),
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.source, ProbeSource::Cache);
+        assert_eq!(
+            result
+                .candidate
+                .unwrap()
+                .record
+                .package_record
+                .version
+                .to_string(),
+            "2.0.0"
+        );
+        assert_eq!(std::fs::read(&cache.0).unwrap(), cached);
+        server.join().unwrap();
+    }
+
+    #[rstest::rstest]
+    #[case(b"{}")]
+    #[case(br#"{"error":"unavailable"}"#)]
+    #[tokio::test]
+    async fn probe_json_without_package_maps_is_unknown(#[case] response: &[u8]) {
+        let temp = tempfile::TempDir::new().unwrap();
+        let (channel, server) =
+            serve_probe_response(200, response.to_vec(), std::time::Duration::ZERO);
+        let cache = probe_cache(temp.path(), &channel);
+        let update = test_update(channel, 0);
+        assert!(
+            probe_test_channel(temp.path(), &test_header("1.0.0"), &update, false)
+                .await
+                .is_none()
+        );
+        assert!(!cache.0.exists());
+        write_cache_file(&cache.0, response).unwrap();
+        assert!(
+            probe_test_channel(temp.path(), &test_header("1.0.0"), &update, true)
+                .await
+                .is_none()
+        );
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn probe_connection_failure_without_cache_is_unknown() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let channel = format!("http://{}/runtime", listener.local_addr().unwrap());
+        drop(listener);
+        let cache = probe_cache(temp.path(), &channel);
+        let update = test_update(channel, 0);
+
+        assert!(
+            probe_test_channel(temp.path(), &test_header("1.0.0"), &update, false)
+                .await
+                .is_none()
+        );
+        assert!(!cache.0.exists());
+    }
+
+    #[tokio::test]
+    async fn probe_deadline_includes_response_body() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let bytes = test_repodata(vec![]);
+        let (channel, server) =
+            serve_probe_response(200, bytes.clone(), std::time::Duration::from_millis(2500));
+        let cache = probe_cache(temp.path(), &channel);
+        write_cache_file(&cache.0, &bytes).unwrap();
+        let result = probe_test_channel(
+            temp.path(),
+            &test_header("1.0.0"),
+            &test_update(channel, 0),
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.source, ProbeSource::Cache);
+        server.join().unwrap();
+    }
+
+    #[rstest::rstest]
+    #[case(false, false)]
+    #[case(true, false)]
+    #[case(false, true)]
+    #[tokio::test]
+    async fn probe_network_result_survives_cache_write_contention_and_failure(
+        #[case] writer_locked: bool,
+        #[case] cache_write_fails: bool,
+    ) {
+        let temp = tempfile::TempDir::new().unwrap();
+        let old = test_repodata(vec![]);
+        let new = test_repodata(vec![test_record(
+            "2.0.0",
+            0,
+            Some(&test_digest(0x22)),
+            Some(42),
+        )]);
+        let (channel, server) = serve_probe_response(200, new.clone(), std::time::Duration::ZERO);
+        let cache = probe_cache(temp.path(), &channel);
+        write_cache_file(&cache.0, &old).unwrap();
+        let _lock = writer_locked.then(|| lock_cache_file(&cache.0).unwrap());
+        if cache_write_fails {
+            std::fs::remove_file(cache.0.with_extension("lock")).unwrap();
+            std::fs::create_dir(cache.0.with_extension("lock")).unwrap();
+        }
+        let result = probe_test_channel(
+            temp.path(),
+            &test_header("1.0.0"),
+            &test_update(channel, 0),
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.source, ProbeSource::Network);
+        assert_eq!(result.cache_age_seconds, None);
+        assert!(result.candidate.is_some());
+        assert_eq!(
+            std::fs::read(&cache.0).unwrap(),
+            if writer_locked || cache_write_fails {
+                old
+            } else {
+                new
+            }
+        );
+        if cache_write_fails {
+            std::fs::remove_dir(cache.0.with_extension("lock")).unwrap();
+        }
+        server.join().unwrap();
     }
 
     #[test]

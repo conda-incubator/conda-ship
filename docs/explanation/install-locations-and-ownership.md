@@ -1,9 +1,9 @@
-# Install Locations And Ownership
+# Install locations and ownership
 
 Generated runtimes install into managed prefixes. They also record ownership
 metadata so later operations can tell whether a prefix belongs to that runtime.
 
-## Install Schemes
+## Install schemes
 
 The install scheme is stamped at build time.
 
@@ -19,7 +19,7 @@ The install scheme is stamped at build time.
 
 The default is `conda-home`.
 
-## Install Name
+## Install name
 
 The install name is the final directory name inside the scheme.
 
@@ -34,7 +34,7 @@ install-name = "express"
 
 With the `conda-home` scheme, that runtime installs below `~/.conda/express`.
 
-## Content-addressed Install Names
+## Content-addressed install names
 
 Use the derived `install-name` form to give each runtime version and rendered
 runtime lock its own managed prefix:
@@ -75,7 +75,7 @@ for that build.
 `CONDA_SHIP_PREFIX` and the runtime-specific prefix environment variable still
 override the resolved path when the stamped runtime executes.
 
-## Runtime Prefix Override
+## Runtime prefix override
 
 `CONDA_SHIP_PREFIX` overrides the resolved install path for every generated
 runtime:
@@ -103,11 +103,10 @@ For a local `cs run` smoke test, use the builder-side option instead:
 cs run --install-path /tmp/demo -- info
 ```
 
-## Ownership Metadata
+## Ownership metadata
 
 After automatic bootstrap, the runtime writes a metadata file inside the
-managed prefix.
-It records:
+managed prefix with:
 
 - schema version
 - bootstrap state
@@ -147,14 +146,14 @@ conda prefix metadata:
 - `conda-meta/history`
 - `conda-meta/initial-state.explicit.txt`
 
-Those files serve a different purpose. `history` lets conda recognize the
-managed prefix as a conda environment. `initial-state.explicit.txt` records the
-exact packages that were installed from the runtime lock at bootstrap time.
+`history` lets conda recognize the managed prefix as a conda environment.
+`initial-state.explicit.txt` records the exact packages that were installed from
+the runtime lock at bootstrap time.
 Tools that understand constructor-style installer snapshots, including
 `conda-self`, can use that explicit file to reset the managed base prefix back
 to the package set originally shipped by the runtime.
 
-## Executable Update Ownership
+## Executable update ownership
 
 Managed-prefix ownership and executable update ownership are separate. The
 prefix metadata file stores both kinds of ownership. Its adjacent
@@ -199,7 +198,7 @@ starts a copy of the previous executable as a deferred worker. The worker waits
 for the stable path to close, installs the candidate, and leaves any remaining
 cleanup for the next invocation.
 
-## Why Runtimes Refuse Unmanaged Prefixes
+## Why runtimes refuse unmanaged prefixes
 
 A runtime can find an existing directory at its install path. That directory may
 be:
@@ -215,7 +214,7 @@ This protects existing conda installations from accidental mutation.
 Automatic bootstrap and later delegate invocations use ownership checks before
 reusing an existing prefix.
 
-## Lifecycle Commands
+## Lifecycle commands
 
 The generated runtime does not own `status`, `repair`, or `uninstall` commands.
 Those names are passed to the configured delegate like every other argument.

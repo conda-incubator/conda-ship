@@ -16,7 +16,7 @@ The workflow is:
 - The downstream project owns package sets, runtime names, user-facing policy,
   installers, documentation, and release channels.
 
-## The Runtime Flow
+## The runtime flow
 
 ```{mermaid}
 flowchart TB
@@ -45,9 +45,6 @@ flowchart TB
     artifacts --> runtime
 ```
 
-The following sections describe the builder, generated runtime, lockfile, and
-package bundle.
-
 ## Builder
 
 The builder turns a project's selected locked environment into release
@@ -61,11 +58,10 @@ artifacts. It reads one of these standard manifest and lockfile pairs:
 It applies the project's [build configuration](../reference/configuration.md),
 then derives a runtime lock, bundle files, runtimes, and artifact metadata.
 
-The selected source lockfile is the source of the concrete conda package
-records. conda-ship is not a replacement for
+conda-ship reads concrete conda package records from the selected source
+lockfile. Solving remains the responsibility of
 {external+conda-workspaces:doc}`conda-workspaces <index>`, Pixi, or another
-workspace solver. It consumes a solved environment and turns it into runtime
-artifacts.
+workspace solver.
 
 ## Runtime
 
@@ -89,26 +85,26 @@ Delegate
 Artifact
 : A release file staged by the build.
 
-## Runtime Template
+## Runtime template
 
 The generic runtime template, `cs-template`, contains the code for installing
 the environment and running the delegate. During a build, `cs` copies it and
 writes the runtime configuration, lockfile, and optional package bundle into
-that copy. The documentation calls this step **stamping**. The stamped copy is
-the runtime that users run.
+that copy. This step is called stamping. The stamped copy is the runtime that
+users run.
 
 Released builds and packaged local builds use prebuilt template assets.
 
-## Runtime Lock
+## Runtime lock
 
 The runtime lock comes from the configured source environment after applying
 the project's package exclusions. conda-ship stamps the derived lock into every
 runtime artifact and stages a copy next to the output binary. It is build
 output, not a second checked-in project lockfile.
 
-The inspection command derives the same runtime lock without writing files,
-which makes it the local preflight step. Build and run operations derive the
-lock as part of their normal work.
+Use the inspection command to derive the same runtime lock without writing
+files before building. Build and run operations derive the lock as part of
+their normal work.
 
 The generated runtime can install from:
 

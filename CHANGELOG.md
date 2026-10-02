@@ -2,6 +2,14 @@
 
 All notable changes to `conda-ship` are documented here.
 
+## Unreleased
+
+### Added
+
+- Added an advisory runtime update probe for downstream notifications. The
+  probe uses cached metadata offline and after network failures, and reports
+  its source and age. It leaves installations and pending updates untouched.
+
 ## 0.9.2 - 2026-09-17
 
 ### Fixed
@@ -459,7 +467,7 @@ conda runtimes from solved conda environments.
 - Bundle builds require SHA256 package metadata.
 - Downloaded, cached, external, embedded, and offline package archives are
   verified before they are staged or installed.
-- Runtime templates refuse to run directly; `cs build` must stamp a template
+- Runtime templates refuse to run directly. `cs build` must stamp a template
   before it becomes a downstream runtime.
 - Runtime names, runtime versions, delegates, install names, install methods,
   target labels, and documentation URLs are validated before they are stamped

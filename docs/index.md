@@ -15,13 +15,13 @@ distribution maintained by Jannis Leidel: it uses conda-ship to build the `cx`
 and `cxz` runtimes. conda-express chooses their packages, settings, and release
 channels.
 
-## Start Here
+## Start here
 
 The [quickstart](tutorials/quickstart.md) installs the builder, creates and
 locks a small conda workspace, and builds a `demo` runtime. For an explanation
 of each step, follow the [first runtime tutorial](tutorials/first-runtime.md).
 
-## Choose A Path
+## Choose a path
 
 - New to conda-ship: follow the
   [first runtime tutorial](tutorials/first-runtime.md).

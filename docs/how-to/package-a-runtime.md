@@ -1,7 +1,7 @@
-# Package A Runtime
+# Package a runtime
 
-Use this guide after `cs build` has produced runtime artifacts and you want to
-hand those files to another distribution channel.
+After `cs build`, publish its artifacts directly or package them for another
+distribution channel.
 
 conda-ship does not generate `.sh`, `.pkg`, `.msi`, Homebrew formulae, Docker
 images, or constructor installers. It produces runtimes and metadata that those
@@ -29,7 +29,7 @@ internal deployment systems.
 
 ::::
 
-## Start From The Output Directory
+## Start from the output directory
 
 Every build writes a directory like `dist/`:
 
@@ -52,7 +52,7 @@ all files produced by the build.
     path: ${{ steps.cs.outputs.dist-path }}
 ```
 
-## Publish Direct Release Assets
+## Publish direct release assets
 
 For direct GitHub Releases, upload the full `dist/` contents:
 
@@ -73,7 +73,7 @@ Treat `dist/` as the release unit. If a channel uploads only the runtime binary,
 it needs an equivalent place for checksums, package metadata, and provenance.
 ```
 
-## Publish Executable Updates
+## Publish executable updates
 
 An update-enabled runtime discovers finalized executable releases through
 native conda channel repodata. The release sequence is:
@@ -96,9 +96,9 @@ the file, verifies its stamp against the build information, and writes a native
 package with one executable payload. It refuses to replace an existing package
 filename.
 
-The package is update transport. A directly owned runtime downloads and
-inspects it before replacing the outer executable. It is not installed into the
-managed prefix. conda-ship does not index or upload the package.
+The package delivers the executable update. A directly owned runtime downloads
+and inspects it before replacing the outer executable. It is not installed
+into the managed prefix. conda-ship does not index or upload the package.
 
 ```{important}
 A Windows runtime built with conda-ship 0.8.0 or earlier cannot validate a
@@ -130,7 +130,7 @@ with `v1/record-installation`. The indexed package remains the common release
 signal. An external installation does not stage its payload, and a replacement
 at the recorded stable path is reconciled on the next runtime invocation.
 
-## Wrap With Homebrew
+## Wrap with Homebrew
 
 For an online runtime, a Homebrew formula usually installs the runtime binary
 and lets the runtime download packages at first bootstrap.
@@ -147,7 +147,7 @@ prefix, then every invocation delegates its arguments. The downstream runtime
 coordinator should validate the Homebrew keg receipt and record external
 ownership with the stable Homebrew `bin` link before checking for an update.
 
-## Wrap With A Conda Package
+## Wrap with a conda package
 
 A conda package can install the runtime binary into the package environment.
 This is useful for distributing a downstream runtime in a conda channel.
@@ -163,7 +163,7 @@ Use `installer` to record where the runtime binary came from:
 cs build --installer conda-package
 ```
 
-## Wrap With constructor Or Another Installer
+## Wrap with constructor or another installer
 
 Installer generators can include either:
 
@@ -199,7 +199,7 @@ bootstrap writes ownership metadata, `conda-meta/history`,
 delegate and conda-self commands rely on.
 ```
 
-## Package For Docker Or Internal Images
+## Package for Docker or internal images
 
 For images, decide whether bootstrap happens at image build time or container
 run time.
@@ -224,9 +224,9 @@ Use `CONDA_SHIP_PREFIX` in images. Runtime-specific `_PREFIX` variables remain
 available for names other than `conda`. Avoid relying on a user home directory
 when the image will run as different users.
 
-## Verify Before Publishing
+## Verify before publishing
 
-Before handing files to another system:
+Verify the staged checksums before publishing or packaging:
 
 ```bash
 (cd dist && shasum -a 256 --check ./*.sha256)

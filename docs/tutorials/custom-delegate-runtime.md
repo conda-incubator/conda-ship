@@ -1,13 +1,12 @@
-# Build A Runtime With A Custom Delegate
+# Build a runtime with a custom delegate
 
-This tutorial builds a runtime whose configured delegate is `python` instead of
-`conda`.
+Build a runtime that delegates to `python` instead of `conda`.
 
 The managed prefix only needs Python and its dependencies. conda-ship does not
 require conda, conda-rattler-solver, or conda-spawn when the distribution does
 not use them.
 
-## Before You Start
+## Before you start
 
 Install conda-ship and either conda-workspaces or Pixi:
 
@@ -40,7 +39,7 @@ conda pypi install conda-ship
 If you prefer not to install `conda-pypi` into `base`, use
 `python -m pip install conda-ship` in the activated environment instead.
 
-## Create The Project
+## Create the project
 
 Create a project directory:
 
@@ -108,7 +107,7 @@ pixi lock
 
 ::::
 
-## Build It
+## Build it
 
 Run a preflight, then build:
 
@@ -119,7 +118,7 @@ cs build
 
 The runtime is staged as `dist/pydemo` on Unix and `dist/pydemo.exe` on Windows.
 
-## Choose A Temporary Prefix
+## Choose a temporary prefix
 
 Create a temporary parent directory for the tutorial prefix:
 
@@ -127,7 +126,7 @@ Create a temporary parent directory for the tutorial prefix:
 mkdir -p .tmp
 ```
 
-## Run Python Through The Runtime
+## Run Python through the runtime
 
 Create a small script:
 
@@ -149,7 +148,7 @@ On the first invocation, `pydemo` automatically installs the selected Python
 environment into the managed prefix and then passes `hello.py` unchanged to the
 Python executable. Later invocations reuse that prefix.
 
-## Clean Up
+## Clean up
 
 Remove the tutorial install path:
 
@@ -157,7 +156,7 @@ Remove the tutorial install path:
 rm -rf -- "$PWD/.tmp/pydemo"
 ```
 
-## What You Learned
+## What you learned
 
 The `delegate-executable` is the executable that receives every argument after
 the runtime is automatically bootstrapped. Use `delegate-executable = "conda"`

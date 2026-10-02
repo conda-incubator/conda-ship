@@ -1,4 +1,4 @@
-# Build Offline Artifacts
+# Build offline artifacts
 
 Offline artifacts let the generated runtime install from package archives that
 were downloaded during the build.
@@ -6,14 +6,14 @@ were downloaded during the build.
 Use them when a downstream distribution needs air-gapped installs, native
 installer integration, or a single self-contained runtime.
 
-## Choose A Layout
+## Choose a layout
 
 ::::{tab-set}
 
 :::{tab-item} External
-Use `external` when you want the runtime and compressed bundle as separate
-files. This is useful when an installer or package manager already knows how to
-place supporting files next to the binary.
+Use `external` to distribute the runtime and compressed bundle as separate
+files. This suits installers and package managers that can place supporting
+files next to the binary.
 
 ```bash
 cs build --artifact-layout external
@@ -31,7 +31,7 @@ cs build --artifact-layout embedded
 
 ::::
 
-## Bootstrap From An External Bundle
+## Bootstrap from an external bundle
 
 For an `external` build, distribute these files together:
 
@@ -62,15 +62,15 @@ a runtime named `demo`, they are `DEMO_BUNDLE`, `DEMO_OFFLINE`, and
 `DEMO_PREFIX`.
 
 `CONDA_SHIP_PREFIX` is also available and takes precedence over `DEMO_PREFIX`.
-For a runtime named `conda`, use `CONDA_SHIP_PREFIX`. The runtime deliberately
-does not interpret an activated `CONDA_PREFIX` as its installation path.
+For a runtime named `conda`, use `CONDA_SHIP_PREFIX`. The runtime does not use
+an activated `CONDA_PREFIX` as its installation path.
 
 ```{note}
 Pass the directory containing the package archives directly. Do not add
 `linux-64/`, `noarch/`, or `repodata.json`.
 ```
 
-## Bootstrap From An Embedded Bundle
+## Bootstrap from an embedded bundle
 
 An embedded runtime carries the bundle inside the binary:
 

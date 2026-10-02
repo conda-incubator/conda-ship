@@ -1,9 +1,6 @@
-# Environment Variables
+# Environment variables
 
-This page lists environment variables used by conda-ship and generated
-runtimes.
-
-## Builder Variables
+## Builder variables
 
 `CONDA_SHIP_TEMPLATE`
 : Path to a prebuilt generic runtime template. `cs build` uses this when
@@ -27,7 +24,7 @@ runtimes.
   Use it for reproducible SBOM timestamps. When unset, the build records the
   current UTC time. Invalid or unsupported timestamps cause a build error.
 
-## Runtime Variables
+## Runtime variables
 
 `CONDA_SHIP_PREFIX`
 : Universal managed-prefix override. It takes precedence over a
@@ -45,26 +42,23 @@ Non-alphanumeric characters become underscores and letters are uppercased.
   other than `conda`. `CONDA_SHIP_PREFIX` takes precedence when both are set.
 
 `RUNTIME_BUNDLE`
-: Runtime-specific path to an external package bundle directory. The actual
-  variable name is based on the runtime name. Non-alphanumeric characters become
-  underscores and letters are uppercased. For `demo`, the variable is
-  `DEMO_BUNDLE`.
+: Runtime-specific path to an external package bundle directory. For `demo`,
+  the variable is `DEMO_BUNDLE`.
 
 `RUNTIME_OFFLINE`
 : Runtime-specific flag for offline bootstrap mode. For `demo`, the variable is
   `DEMO_OFFLINE`. Empty, `0`, and `false` disable the flag. Other non-empty
   values enable it. The comparison with `false` is case-insensitive.
 
-## Runtime Update Coordinator Variables
+## Runtime update coordinator variables
 
-These variables configure the version-one helper used by downstream
-transaction coordinators. They are intended for integration code.
-See {doc}`runtime-cli` for the required bootstrap, lock, and call sequence.
+Downstream integration code uses these variables to invoke the version-one
+helper. See {doc}`runtime-cli` for each action's bootstrap and lock requirements.
 
 `CONDA_SHIP_INTERNAL_UPDATE`
 : Select the helper action. Version one defines `v1/record-installation`,
-  `v1/check`, `v1/stage`, and `v1/apply`. Generated runtimes do not reserve a
-  delegate subcommand for these operations.
+  `v1/probe`, `v1/check`, `v1/stage`, and `v1/apply`. Generated runtimes do not
+  reserve a delegate subcommand for these operations.
 
 `CONDA_SHIP_INTERNAL_UPDATE_CANDIDATE`
 : Lowercase SHA256 selected from the `v1/check` result. It is required by
@@ -73,8 +67,10 @@ See {doc}`runtime-cli` for the required bootstrap, lock, and call sequence.
 `CONDA_SHIP_INTERNAL_UPDATE_OFFLINE`
 : Disable network access for update resolution and staging. Empty, `0`, and
   `false` disable the flag. The comparison with `false` is case-insensitive.
-  Other non-empty values enable it. An HTTPS update requires previously cached
-  repodata and package content in this mode. A `file://` channel is read directly.
+  Other non-empty values enable it. For HTTPS channels, probe and check read
+  cached repodata, and stage also needs cached package content. Probe reports
+  unknown availability when no usable metadata is cached. A `file://` channel
+  is read directly.
 
 `CONDA_SHIP_INTERNAL_UPDATE_OWNERSHIP`
 : Installed executable ownership for `v1/record-installation`. Supported values
@@ -94,7 +90,7 @@ See {doc}`runtime-cli` for the required bootstrap, lock, and call sequence.
 : Optional non-empty external-manager instruction for
   `v1/record-installation`. Direct ownership rejects this variable.
 
-## Delegate Environment
+## Delegate environment
 
 The runtime executes the configured delegate from the managed prefix without
 presenting that prefix as an activated conda environment. It does not set
@@ -106,7 +102,7 @@ the inherited process streams remain unchanged.
   the delegate and its child processes can find installed commands and shared
   libraries. This changes `PATH` only. It does not activate the prefix.
 
-## Test And Development Variable
+## Test and development variable
 
 `CONDA_SHIP_ALLOW_UNSTAMPED_TEMPLATE`
 : Allows the generic runtime template binary to run without stamped runtime
