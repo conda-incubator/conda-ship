@@ -1,4 +1,4 @@
-# Configuration Reference
+# Configuration reference
 
 Configure the runtime in your project manifest. conda-ship reads the selected
 environment's resolved package records from the matching lockfile.
@@ -8,7 +8,7 @@ lockfile pairs.
 Packaged builds find the installed runtime template automatically, so local
 projects do not need a conda-ship source checkout.
 
-## Manifest Discovery
+## Manifest discovery
 
 conda-ship looks in the build root for:
 
@@ -36,7 +36,7 @@ a source manifest on its own.
 workspace tools. conda-ship derives a runtime lock from that source lockfile
 while inspecting, building, or smoke-testing a runtime.
 
-## Source Environment
+## Source environment
 
 The selected source environment determines the conda packages available to the
 generated runtime. Only conda packages are supported. Locked PyPI packages in
@@ -278,7 +278,7 @@ conda-ship records the resolved package names and channel URLs in runtime
 metadata. It writes persistent conda configuration only when `condarc-file` is
 set.
 
-## Stamped Runtime Metadata
+## Stamped runtime metadata
 
 `cs build` stamps these values onto the runtime after resolving `runtime-name`,
 `artifact-name`, and `artifact-layout` from CLI flags or `[tool.conda-ship]`:
@@ -335,12 +335,11 @@ corresponding options are set.
 
 Non-alphanumeric characters in environment variable names become underscores.
 
-## Downstream Defaults
+## Downstream defaults
 
 conda-ship's repository default package set exists so the builder and
 runtime behavior can be tested. A downstream distribution makes its own
 package choices in its project manifest before committing the matching lockfile.
 
-For example, conda-express owns the package set and runtime names used when
-building `cx` and `cxz`. Those choices are conda-express policy, not
-conda-ship policy.
+For example, conda-express chooses the package set and runtime names used when
+building `cx` and `cxz`.

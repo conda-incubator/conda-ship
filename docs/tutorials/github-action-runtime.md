@@ -1,13 +1,11 @@
-# Build A Runtime In GitHub Actions
+# Build a runtime in GitHub Actions
 
-This tutorial takes a committed conda-ship project and builds runtime artifacts
-with the composite GitHub Action.
-
-You will add a workflow that downloads released conda-ship build tools, verifies
+Build runtime artifacts from a committed conda-ship project with the composite
+GitHub Action. The workflow downloads released conda-ship build tools, verifies
 them, runs `cs build --dry-run`, builds the runtime, and uploads the generated
 `dist` directory as a workflow artifact.
 
-## Before You Start
+## Before you start
 
 You need a repository that already contains one supported manifest and lockfile
 pair:
@@ -34,7 +32,7 @@ cs inspect
 cs build --dry-run
 ```
 
-## Add The Workflow
+## Add the workflow
 
 Create `.github/workflows/build-runtime.yml`:
 
@@ -102,7 +100,7 @@ commit SHA. The SHA above is an example, not a recommendation to keep using that
 exact revision indefinitely.
 ```
 
-## Run It
+## Run it
 
 Push the workflow and start it from the GitHub Actions tab, or wait for the next
 push to `main`.
@@ -121,7 +119,7 @@ uploading it. That downstream attestation covers the runtime binary,
 `.runtime.lock`, `.packages.txt`, `.cdx.json`, `.info.json`, `.sha256`, and any
 external bundle produced by that job.
 
-## Inspect The Artifact
+## Inspect the artifact
 
 Each job uploads the full generated output directory. Download one artifact and
 inspect the files:
@@ -140,7 +138,7 @@ For an `external` build, the directory also contains
 the bundle inside the binary and uses the configured runtime name unless
 `artifact-name` sets a distinct artifact name.
 
-## Override Runtime Metadata
+## Override runtime metadata
 
 Keep package and channel choices in the manifest and lockfile. Use action inputs
 for release-job metadata that may vary across a matrix:
@@ -163,7 +161,7 @@ The action does not validate those values itself. It passes them to
 `cs build --dry-run`. Invalid values fail in conda-ship before artifact files
 are written.
 
-## What You Learned
+## What you learned
 
 The workflow builds runtime artifacts from the committed manifest and lockfile.
 Use conda-workspaces or Pixi to update those files when packages change. The

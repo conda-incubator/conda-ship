@@ -1,9 +1,9 @@
-# Trust And Provenance
+# Trust and provenance
 
 conda-ship verifies build inputs and package archives. Downstream distributions
 choose signing and release policy for their final artifacts.
 
-## Build Tool Trust
+## Build tool trust
 
 The GitHub Action downloads conda-ship release assets:
 
@@ -12,10 +12,8 @@ The GitHub Action downloads conda-ship release assets:
 - `SHA256SUMS`
 
 It verifies GitHub artifact attestations for those files and checks the
-published SHA256 sums before running `cs`.
-
-This protects the builder path from accidentally executing an unverified
-downloaded binary in CI.
+published SHA256 sums before running `cs`, so CI does not accidentally execute
+an unverified downloaded binary.
 
 Published conda-ship GitHub releases are immutable. The release workflow creates
 a draft release, uploads the complete asset set, then verifies the assets and
@@ -24,7 +22,7 @@ publication, the tag and assets are not replaced. If a published release is
 wrong, the project should publish a new version instead of modifying the
 existing one.
 
-## Source Lock Trust
+## Source lock trust
 
 The source lockfile is committed project input. conda-ship assumes the
 downstream project reviewed and committed that lockfile intentionally.
@@ -33,7 +31,7 @@ conda-ship does not solve loose matchspecs in the GitHub Action. That avoids a
 release build changing package records because a channel changed between
 workflow runs.
 
-## Package Archive Trust
+## Package archive trust
 
 The runtime lock contains concrete package records. For bundle builds,
 conda-ship requires SHA256 metadata so downloaded package archives can be
@@ -48,7 +46,7 @@ During bootstrap:
 The runtime rejects package archive mismatches instead of silently installing
 unexpected files.
 
-## Executable Update Trust
+## Executable update trust
 
 An update-enabled runtime resolves native `.conda` packages from its stamped
 channel. Before staging an executable it verifies:
@@ -68,7 +66,7 @@ These checks do not verify GitHub attestations, a provider-specific signature,
 or an external package manager's signature. Downstream publication and signing
 policy remains separate from the native update package format.
 
-## Runtime Artifact Trust
+## Runtime artifact trust
 
 Every staged build writes checksums and metadata:
 
@@ -87,7 +85,7 @@ vendored, or statically linked component. Downstream projects remain
 responsible for evaluating the full product scope and for their CRA technical
 documentation, access, publication, and retention policy.
 
-## Downstream Signing And Attestation
+## Downstream signing and attestation
 
 The GitHub Action exposes `dist-path` so downstream workflows can attest the
 exact conda-ship build output: the runtime binary, `.runtime.lock`,
@@ -144,7 +142,7 @@ template against the matching conda-ship release attestation or checksum before
 using it. A party able to replace a trusted template can forge the declaration
 or replace the program it contains, regardless of the runtime-data format.
 
-Good places for downstream release controls include:
+Downstream release controls can include:
 
 - GitHub Release artifact attestations
 - Sigstore signatures
@@ -158,7 +156,7 @@ GitHub release immutability is useful downstream too, but it is not a
 replacement for signing. It keeps a published asset set stable. Attestations and
 signatures explain who produced that asset set and from which workflow.
 
-## Authentication And Offline Updates
+## Authentication and offline updates
 
 Stamped update channel URLs cannot contain credentials, a query, or a fragment.
 HTTPS requests can read credentials from the explicit JSON file selected with
@@ -171,7 +169,7 @@ repodata and the selected package are already cached. A `file://` channel reads
 repodata and packages directly and does not need a network cache. Cached data is
 still checked against the same package and payload hashes.
 
-## What conda-ship Does Not Promise
+## What conda-ship does not promise
 
 conda-ship does not:
 

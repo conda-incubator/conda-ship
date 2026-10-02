@@ -459,7 +459,7 @@ conda runtimes from solved conda environments.
 - Bundle builds require SHA256 package metadata.
 - Downloaded, cached, external, embedded, and offline package archives are
   verified before they are staged or installed.
-- Runtime templates refuse to run directly; `cs build` must stamp a template
+- Runtime templates refuse to run directly. `cs build` must stamp a template
   before it becomes a downstream runtime.
 - Runtime names, runtime versions, delegates, install names, install methods,
   target labels, and documentation URLs are validated before they are stamped
