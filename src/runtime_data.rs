@@ -3911,6 +3911,7 @@ mod tests {
     fn test_pe_reader_rejects_nonzero_alignment_before_overlay_content() {
         let binary = pe_fixture(false);
         let mut header = RuntimeDataHeader::for_name("nonzero-alignment");
+        header.runtime_version = "1.0.0".to_string();
         while serde_json::to_vec(&header)
             .unwrap()
             .len()
@@ -3953,7 +3954,8 @@ mod tests {
     #[test]
     fn test_signed_legacy_pe_overlay_is_not_trusted() {
         let binary = pe_fixture(true);
-        let header = RuntimeDataHeader::for_name("legacy");
+        let mut header = RuntimeDataHeader::for_name("legacy");
+        header.runtime_version = "1.0.0".to_string();
         let payload = runtime_payload(&header);
         let mut file = OpenOptions::new().append(true).open(binary.path()).unwrap();
         file.write_all(&payload).unwrap();

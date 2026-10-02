@@ -604,6 +604,8 @@ jobs:
             os: macos-15
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -661,6 +663,24 @@ jobs:
           else
             (cd "$DIST_PATH" && shasum --algorithm 256 --check "$manifest")
           fi
+
+      - name: Smoke test native Windows ARM64 action runtime
+        if: github.event_name == 'push' && matrix.target == 'aarch64-pc-windows-msvc'
+        shell: bash
+        env:
+          BINARY_PATH: ${{ steps.released_action.outputs.binary-path || steps.tagged_action.outputs.binary-path }}
+        run: |
+          CONDA_SHIP_PREFIX="$RUNNER_TEMP/action-arm64-smoke" "$BINARY_PATH" info --json
+          CONDA_SHIP_PREFIX="$RUNNER_TEMP/action-arm64-smoke" "$BINARY_PATH" list --json
+          "$RUNNER_TEMP/action-arm64-smoke/python.exe" -I - <<'PYTHON'
+          import struct, sys, sysconfig
+          from pathlib import Path
+          assert sysconfig.get_platform() == "win-arm64"
+          launcher = (Path(sys.executable).parent / "Scripts" / "conda.exe").read_bytes()
+          pe_offset = struct.unpack_from("<I", launcher, 0x3C)[0]
+          assert launcher[pe_offset:pe_offset + 6] == b"PE\0\0\x64\xaa"
+          print("Native ARM64 Python and conda launcher verified")
+          PYTHON
 
       - name: Verify tagged macOS action output signature
         if: github.event_name == 'push' && contains(matrix.target, 'apple-darwin')
@@ -720,6 +740,20 @@ jobs:
             (cd "$out_dir" && sha256sum --check "$(basename "$manifest")")
           else
             (cd "$out_dir" && shasum --algorithm 256 --check "$(basename "$manifest")")
+          fi
+          if [[ "$TARGET" == "aarch64-pc-windows-msvc" ]]; then
+            runtime="$out_dir/release-smoke-${TARGET}.exe"
+            CONDA_SHIP_PREFIX="$RUNNER_TEMP/candidate-arm64-smoke" "$runtime" info --json
+            CONDA_SHIP_PREFIX="$RUNNER_TEMP/candidate-arm64-smoke" "$runtime" list --json
+            "$RUNNER_TEMP/candidate-arm64-smoke/python.exe" -I - <<'PYTHON'
+          import struct, sys, sysconfig
+          from pathlib import Path
+          assert sysconfig.get_platform() == "win-arm64"
+          launcher = (Path(sys.executable).parent / "Scripts" / "conda.exe").read_bytes()
+          pe_offset = struct.unpack_from("<I", launcher, 0x3C)[0]
+          assert launcher[pe_offset:pe_offset + 6] == b"PE\0\0\x64\xaa"
+          print("Native ARM64 Python and conda launcher verified")
+          PYTHON
           fi
           if [[ "$TARGET" == *"apple-darwin"* ]]; then
             runtime="$out_dir/release-smoke-${TARGET}"

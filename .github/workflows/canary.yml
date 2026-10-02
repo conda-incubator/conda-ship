@@ -43,6 +43,8 @@ jobs:
             os: macos-15
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
     env:
       TARGET: ${{ matrix.target }}
       SCCACHE_GHA_ENABLED: "true"
@@ -105,25 +107,59 @@ jobs:
           fi
           DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" info --json
           DEMO_PREFIX="$RUNNER_TEMP/demo-smoke" "$BIN" list --json
+          if [[ "$TARGET" == "aarch64-pc-windows-msvc" ]]; then
+            "$RUNNER_TEMP/demo-smoke/python.exe" -I - <<'PYTHON'
+          import struct, sys, sysconfig
+          from pathlib import Path
+          assert sysconfig.get_platform() == "win-arm64"
+          launcher = (Path(sys.executable).parent / "Scripts" / "conda.exe").read_bytes()
+          pe_offset = struct.unpack_from("<I", launcher, 0x3C)[0]
+          assert launcher[pe_offset:pe_offset + 6] == b"PE\0\0\x64\xaa"
+          print("Native ARM64 Python and conda launcher verified")
+          PYTHON
+          fi
 
       - name: Build embedded bundle
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-pc-windows-msvc'
+        shell: bash
         run: |
-          ./target/release/cs build \
+          cs="./target/release/cs"
+          template="./target/release/cs-template"
+          if [[ "$TARGET" == *"windows"* ]]; then
+            cs="${cs}.exe"
+            template="${template}.exe"
+          fi
+          "$cs" build \
             --artifact-layout embedded \
             --runtime-name demo \
             --artifact-name demoz \
             --delegate-executable conda \
             --target "$TARGET" \
             --target-label "$TARGET" \
-            --template ./target/release/cs-template
+            --template "$template"
 
       - name: Smoke test embedded bundle
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-pc-windows-msvc'
         shell: bash
         run: |
-          DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" ./dist/demoz-"$TARGET" info --json
-          DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" ./dist/demoz-"$TARGET" list --json
+          if [[ "$TARGET" == *"windows"* ]]; then
+            BIN="./dist/demoz-${TARGET}.exe"
+          else
+            BIN="./dist/demoz-${TARGET}"
+          fi
+          DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" info --json
+          DEMO_PREFIX="$RUNNER_TEMP/demoz-smoke" "$BIN" list --json
+          if [[ "$TARGET" == "aarch64-pc-windows-msvc" ]]; then
+            "$RUNNER_TEMP/demoz-smoke/python.exe" -I - <<'PYTHON'
+          import struct, sys, sysconfig
+          from pathlib import Path
+          assert sysconfig.get_platform() == "win-arm64"
+          launcher = (Path(sys.executable).parent / "Scripts" / "conda.exe").read_bytes()
+          pe_offset = struct.unpack_from("<I", launcher, 0x3C)[0]
+          assert launcher[pe_offset:pe_offset + 6] == b"PE\0\0\x64\xaa"
+          print("Native ARM64 Python and conda launcher verified")
+          PYTHON
+          fi
 
       - name: Stage canary binary
         shell: bash
@@ -142,76 +178,6 @@ jobs:
           name: ${{ env.ASSET_NAME }}
           path: ${{ env.ASSET_NAME }}
           retention-days: 3
-
-  windows-arm64-canary:
-    name: Build canary (aarch64-pc-windows-msvc)
-    runs-on: windows-11-arm
-    timeout-minutes: 30
-    env:
-      CARGO_TERM_COLOR: always
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: "true"
-      TARGET: aarch64-pc-windows-msvc
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Prepare Rust toolchain
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rustup toolchain install stable --profile minimal
-          rustup default stable
-
-      - name: Verify native target
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rustc -vV
-          cargo -vV
-
-          host="$(rustc -vV | sed -n 's/^host: //p')"
-          if [ "$host" != "$TARGET" ]; then
-            echo "Expected runner target ${TARGET}, got ${host}" >&2
-            exit 1
-          fi
-
-      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-
-      - name: Fetch locked dependencies
-        run: cargo fetch --locked
-
-      # Keep this out of the main build matrix until win-arm64 conda package
-      # coverage is sufficient for runtime bootstrap smoke tests.
-      - name: Build cs CLI
-        run: cargo rustc --locked --release --bin cs -- -D warnings
-
-      - name: Build runtime template
-        run: cargo rustc --locked --release --bin cs-template --features runtime-template -- -D warnings
-
-      - name: Smoke built binaries
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          target/release/cs.exe --help >/dev/null
-          if target/release/cs-template.exe 2>template-error.txt; then
-            echo "Expected the unstamped template to refuse execution" >&2
-            exit 1
-          fi
-          grep -q "runtime template, not a runnable conda runtime" template-error.txt
-
-      - name: Validate native builder and template pair
-        shell: bash
-        run: |
-          python tests/ci/validate_runtime_pair.py native \
-            --target "$TARGET" \
-            --platform win-arm64 \
-            --scratch-root "$RUNNER_TEMP"
 
   package-wheels:
     name: Package PyPI wheel (${{ matrix.target }})

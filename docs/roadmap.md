@@ -69,6 +69,3 @@ Planned work includes:
 - add richer provenance examples for package-manager specific release workflows
 - keep builds based on committed manifests and lockfiles, with package and
   channel changes made in the manifest
-- keep full Windows ARM64 conda runtime bootstrap coverage behind the regular
-  canary until the conda package ecosystem has enough stable `win-arm64`
-  runtime coverage
