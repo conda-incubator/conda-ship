@@ -665,7 +665,7 @@ jobs:
           fi
 
       - name: Smoke test native Windows ARM64 action runtime
-        if: matrix.target == 'aarch64-pc-windows-msvc'
+        if: github.event_name == 'push' && matrix.target == 'aarch64-pc-windows-msvc'
         shell: bash
         env:
           BINARY_PATH: ${{ steps.released_action.outputs.binary-path || steps.tagged_action.outputs.binary-path }}
