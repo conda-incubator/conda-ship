@@ -1,4 +1,4 @@
-# How Generated Runtimes Work
+# How generated runtimes work
 
 When you run `cs build`, conda-ship copies the `cs-template` runtime template
 and writes your configuration, lockfile, and optional bundle into that copy.
@@ -7,7 +7,7 @@ This step is called stamping. Set the runtime name with
 `[tool.conda-ship].artifact-name` or `--artifact-name` when the staged
 executable needs a different filename.
 
-## What `cs build` Writes
+## What `cs build` writes
 
 During a runtime build, conda-ship writes these details into the copied
 binary:
@@ -23,7 +23,7 @@ binary:
 - optional condarc contents and base-freezing setting
 - optional executable update source and build number
 
-## Where The Template Comes From
+## Where the template comes from
 
 The conda-ship package installs `cs-template` alongside `cs`. The GitHub Action
 downloads it from conda-ship's release assets. Release asset names include the
@@ -51,7 +51,7 @@ metadata, and install settings needed to run.
 Source checkouts use the same selection order. `cs build` does not compile a
 template automatically.
 
-## Keep Native Builders And Templates Paired
+## Keep native builders and templates paired
 
 macOS and Windows builders require the signed-layout reader declaration emitted
 by the matching `cs-template` release. conda-ship 0.9.0 rejects native templates
@@ -63,7 +63,7 @@ For the GitHub Action, update the pinned full action commit SHA and the
 and template from the same release and verify both against that release's
 attestations or `SHA256SUMS`.
 
-## What Users See
+## What users see
 
 The finished runtime does not expose conda-ship commands. On first invocation it
 installs the selected package set into its managed prefix, then executes the
@@ -78,18 +78,18 @@ bytes can be directly or externally managed. This behavior is part of the
 stamped native template. The conda-ship Python package is not installed in the
 managed prefix and is not needed at runtime.
 
-This means `--help`, `--version`, `status`, `shell`, `uninstall`, and every
-other argument belong to the delegate. For a conda delegate, `conda info`
-reports conda and prefix status. If the distribution includes a conda-spawn
-version that provides `conda shell`, users can run `RUNTIME shell`.
+The delegate handles `--help`, `--version`, `status`, `shell`, `uninstall`, and
+every other argument. For a conda delegate, `conda info` reports conda and prefix
+status. If the distribution includes a conda-spawn version that provides
+`conda shell`, users can run `RUNTIME shell`.
 
 Downstream distributions can stamp native condarc contents and protect the base
 prefix with a CEP 22 frozen marker. Without those opt-ins, conda-ship leaves
 conda configuration and package-created frozen markers untouched.
 
-## What Each Project Chooses
+## What each project chooses
 
-Some runtime behavior is visible to users:
+Users see these runtime behaviors:
 
 - automatic bootstrap before the first delegate invocation
 - unchanged delegate arguments, process streams, signals, and exit status

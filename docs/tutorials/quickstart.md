@@ -1,10 +1,10 @@
 # Quickstart
 
-Use this page when you want the shortest local path from an empty directory to a
-staged runtime artifact. It uses conda-workspaces. The full first-runtime
-tutorial also covers automatic first-run bootstrap and embedded builds.
+Build a staged runtime artifact from an empty directory with conda-workspaces.
+The full first-runtime tutorial also covers automatic first-run bootstrap and
+embedded builds.
 
-## Install The Builder
+## Install the builder
 
 Create an environment with conda-workspaces, then install conda-ship from PyPI
 through conda:
@@ -26,7 +26,7 @@ cs --help
 conda workspace --help
 ```
 
-## Create A Runtime Project
+## Create a runtime project
 
 Create a project and add the packages chosen for this conda runtime:
 
@@ -56,7 +56,7 @@ exclude-packages = ["conda-libmamba-solver"]
 TOML
 ```
 
-## Lock And Build
+## Lock and build
 
 Solve the source lockfile, inspect the derived runtime package set, preview the
 build, and write the runtime artifact:
@@ -69,7 +69,7 @@ cs build
 ```
 
 The online runtime is staged at `dist/demo` on Unix and `dist/demo.exe` on
-Windows. Invoke the conda delegate. The first invocation automatically
+Windows. Run it to invoke the conda delegate. The first invocation automatically
 bootstraps the managed prefix before running `conda info`:
 
 ```bash

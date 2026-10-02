@@ -1,12 +1,11 @@
-# Build Your First Runtime
+# Build your first runtime
 
-This tutorial builds a local conda runtime named `demo` from a
-conda-workspaces project.
+Build a local conda runtime named `demo` from a conda-workspaces project.
 
 You will create a small project, lock it, build a runtime binary, and invoke it
 with a temporary managed prefix.
 
-## Before You Start
+## Before you start
 
 You need:
 
@@ -33,7 +32,7 @@ cs --help
 conda workspace --help
 ```
 
-## Create A Project
+## Create a project
 
 Create an empty project directory:
 
@@ -74,7 +73,7 @@ exclude-packages = ["conda-libmamba-solver"]
 TOML
 ```
 
-## Lock The Project
+## Lock the project
 
 Solve the source lockfile with conda-workspaces:
 
@@ -85,7 +84,7 @@ conda workspace lock
 This writes `conda.lock`. conda-ship reads the resolved package records from
 that file when it builds the runtime.
 
-## Inspect The Package Set
+## Inspect the package set
 
 Run a preflight check before building. This derives the runtime package set,
 applies exclusions, and prints the selected packages without writing files:
@@ -97,7 +96,7 @@ cs inspect
 The output lists the selected manifest and lockfile, each locked platform, and
 the package set for your current platform.
 
-## Build The Runtime
+## Build the runtime
 
 Build an online runtime named `demo`:
 
@@ -111,7 +110,7 @@ Windows.
 An online runtime contains the lockfile and runtime metadata. It downloads conda
 package archives when it bootstraps.
 
-## Smoke-Test The Runtime
+## Smoke-test the runtime
 
 For this tutorial, invoke the generated runtime with a temporary local prefix:
 
@@ -121,9 +120,9 @@ DEMO_PREFIX="$PWD/.tmp/demo" ./dist/demo info
 ```
 
 Because the prefix is absent, the runtime automatically bootstraps the selected
-package set and then executes `conda info`. The command output is the delegate's
-normal status output. A real downstream distribution should document how its
-users install and update the runtime it publishes.
+package set and then executes `conda info`. The command produces the delegate's
+normal status output. Downstream distributions should document how users install
+and update their published runtimes.
 
 The runtime also writes conda prefix metadata during bootstrap:
 
@@ -155,7 +154,7 @@ The generated runtime does not reserve an uninstall command. For a published
 distribution, removal belongs to its installer, package manager, or a
 self-management plugin such as conda-self.
 
-## Optional: Build An Embedded Runtime
+## Optional: build an embedded runtime
 
 The embedded layout puts compressed package archives inside the generated
 binary. This makes the build slower and the binary larger, but bootstrap no
@@ -175,12 +174,12 @@ DEMO_PREFIX="$PWD/.tmp/demo-embedded" ./dist/demo info
 rm -rf -- "$PWD/.tmp/demo-embedded"
 ```
 
-## What You Learned
+## What you learned
 
 You created a small workspace project, solved it, built an online runtime, and
 used that binary to install its conda prefix automatically before running the
 configured delegate.
 
-For a real downstream distribution, choose a runtime name owned by that
-distribution, keep its package choices in the source manifest, and publish the
-staged files from `dist/`.
+For a downstream distribution, choose a runtime name owned by that distribution,
+keep its package choices in the source manifest, and publish the staged files
+from `dist/`.

@@ -1,12 +1,10 @@
 # Errors
 
-This page lists common conda-ship errors and the usual fix.
-
 `cs` prints human-readable diagnostics by default. The `conda ship` adapter uses
 an internal structured diagnostic mode so it can show the same errors through
 conda without depending on terminal formatting.
 
-## Project Input
+## Project input
 
 `could not find project root containing conda.toml, pixi.toml, or supported pyproject.toml`
 : Run from the project root or pass `--root PATH`.
@@ -48,7 +46,7 @@ conda without depending on terminal formatting.
 : Use normal condarc key and value entries rather than a top-level scalar or
   sequence.
 
-## Package Archives
+## Package archives
 
 `cannot bundle packages without SHA256 hashes`
 : Refresh the source lockfile with package hash metadata before building
@@ -57,7 +55,7 @@ conda without depending on terminal formatting.
 `no default environment in ... runtime.lock`
 : The derived runtime lock is malformed. Rebuild from the source lockfile.
 
-## Template Selection
+## Template selection
 
 `runtime template not found`
 : Install a conda-ship package that includes `cs-template`, set
@@ -163,7 +161,7 @@ conda without depending on terminal formatting.
 `installer may only contain ASCII letters, digits, dots, dashes, and underscores`
 : Use a short installer name such as `homebrew`, `conda-package`, or `standalone`.
 
-## Runtime Bootstrap
+## Runtime bootstrap
 
 `runtime template, not a runnable runtime`
 : Run a binary produced by `cs build`, not the generic runtime template.
@@ -179,7 +177,7 @@ conda without depending on terminal formatting.
   containing package archive files, not the compressed `.bundle.tar.zst` file
   itself.
 
-## Prefix Ownership
+## Prefix ownership
 
 `refusing to bootstrap into existing non-empty path`
 : Set `CONDA_SHIP_PREFIX` to another path or remove the existing directory

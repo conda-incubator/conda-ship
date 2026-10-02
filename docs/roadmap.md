@@ -1,7 +1,6 @@
 # Roadmap
 
-`cs` is focused on the generic build system for single-binary conda
-runtimes.
+`cs` builds single-binary conda runtimes.
 
 The builder CLI covers the core local workflow:
 
@@ -20,9 +19,9 @@ Generated runtime behavior lives in `cs-template`. This includes automatic
 bootstrap and executable updates when the runtime has update configuration.
 Downstream projects choose their own package sets and distribution defaults.
 
-The repository stays focused on producing runtimes. Distribution
-wrappers such as Homebrew formulae, constructor-based installers, Docker images,
-or enterprise package manager recipes live outside the core builder.
+Distribution wrappers such as Homebrew formulae, constructor-based installers,
+Docker images, or enterprise package manager recipes live outside the core
+builder.
 
 ## Experimental Fleet API
 
@@ -39,7 +38,7 @@ catalog, solver, launchers, shell setup, and update or repair workflows.
 See [fleet concepts](explanation/fleet.md) and the
 [API reference](reference/fleet.md).
 
-## Manifest And Plugin Work
+## Manifest and plugin work
 
 conda-ship supports conda-workspaces project input for downstream
 distribution builds:
@@ -61,11 +60,11 @@ distribution builds:
 - `conda-ship` provides a `conda ship` adapter while preserving
   `cs` as the primary CLI.
 
-The packaged builder path now uses release-published runtime templates, so
+The packaged builder uses published runtime templates, so
 installed `cs build` and `conda ship build` can stamp downstream
 runtimes without a conda-ship source checkout.
 
-Current follow-up work is mostly distribution hardening:
+Planned work includes:
 
 - add richer provenance examples for package-manager specific release workflows
 - keep builds based on committed manifests and lockfiles, with package and
