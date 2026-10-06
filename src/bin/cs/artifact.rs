@@ -13,14 +13,14 @@ use sha2::{Digest, Sha256};
 use super::bundle::gen_bundle_from_lock;
 use super::diagnostic::{DiagnosticKind, ship_error};
 use super::project::{
-    DerivedRuntimeLock, derive_runtime_lock, package_record, project_root,
+    DerivedRuntimeLock, ProjectInput, derive_runtime_lock, package_record, project_root,
     write_generated_runtime_lock,
 };
 use super::sbom::{creation_timestamp, render_cyclonedx_sbom};
 use super::{
     BUNDLE_ARCHIVE_FILE, BundleLayout, InstallNameConfig, InstallNameSource, RUNTIME_LOCK_FILE,
     RUNTIME_TEMPLATE_ENV, RuntimeStampConfig, RuntimeVersionSource, SHIP_STATE_DIR, ShipConfig,
-    runtime_data,
+    SourceInput, runtime_data,
 };
 
 #[derive(Debug)]
@@ -44,6 +44,63 @@ struct PlannedArtifactPaths {
     lock: PathBuf,
     package_list: PathBuf,
     sbom: PathBuf,
+}
+
+impl PlannedArtifactPaths {
+    fn validate_source_inputs(
+        &self,
+        root: &Path,
+        input: &ProjectInput,
+        layout: BundleLayout,
+    ) -> miette::Result<()> {
+        let runtime_lock = generated_runtime_lock_path(root);
+        let generated_bundle = generated_bundle_path(root);
+        let published_bundle = self
+            .binary
+            .with_file_name(format!("{}.bundle.tar.zst", self.stem));
+        let bundle_dir = root.join(SHIP_STATE_DIR).join("bundle");
+        let mut outputs = vec![
+            &runtime_lock,
+            &self.binary,
+            &self.info,
+            &self.checksums,
+            &self.lock,
+            &self.package_list,
+            &self.sbom,
+            &published_bundle,
+        ];
+        if layout.needs_bundle() {
+            outputs.push(&generated_bundle);
+        }
+        for input_path in [&input.manifest_path, &input.lock_path] {
+            if outputs
+                .iter()
+                .any(|output| same_file::is_same_file(output, input_path).unwrap_or(false))
+            {
+                return Err(miette::miette!(
+                    "build output would overwrite a source input: {}",
+                    input_path.display()
+                ));
+            }
+            if layout.needs_bundle() {
+                let resolved = input_path
+                    .canonicalize()
+                    .into_diagnostic()
+                    .context("failed to resolve source input path")?;
+                if input_path
+                    .ancestors()
+                    .chain(resolved.ancestors())
+                    .any(|ancestor| same_file::is_same_file(&bundle_dir, ancestor).unwrap_or(false))
+                {
+                    return Err(miette::miette!(
+                        "build output would remove a source input in the bundle directory: {}",
+                        input_path.display()
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -147,6 +204,7 @@ pub(crate) fn dry_run_build_artifact(
     installer: Option<String>,
     out_dir: PathBuf,
     root_override: Option<PathBuf>,
+    source: &SourceInput,
 ) -> miette::Result<()> {
     if let Some(label) = target_label.as_deref() {
         validate_target_label(label)?;
@@ -154,10 +212,10 @@ pub(crate) fn dry_run_build_artifact(
     if let Some(target) = target.as_deref() {
         validate_target_triple(target)?;
     }
-    let root = project_root(root_override.as_deref())?;
+    let root = project_root(root_override.as_deref(), source.manifest.as_deref())?;
     let platform = parse_platform(platform_str)?;
 
-    let mut derived = derive_runtime_lock(&root)?;
+    let mut derived = derive_runtime_lock(&root, source)?;
     let runtime = resolve_runtime_name(runtime_name, &derived.input.config)?;
     let delegate_executable =
         resolve_delegate_executable(delegate_executable, &derived.input.config)?;
@@ -199,6 +257,7 @@ pub(crate) fn dry_run_build_artifact(
         target_label.as_deref(),
         target.as_deref(),
     );
+    paths.validate_source_inputs(&root, &derived.input, layout)?;
     print_build_dry_run(
         &root,
         &derived,
@@ -232,6 +291,7 @@ pub(crate) fn build_artifact(
     installer: Option<String>,
     out_dir: PathBuf,
     root_override: Option<PathBuf>,
+    source: &SourceInput,
 ) -> miette::Result<BuildOutput> {
     if let Some(label) = target_label.as_deref() {
         validate_target_label(label)?;
@@ -239,10 +299,10 @@ pub(crate) fn build_artifact(
     if let Some(target) = target.as_deref() {
         validate_target_triple(target)?;
     }
-    let root = project_root(root_override.as_deref())?;
+    let root = project_root(root_override.as_deref(), source.manifest.as_deref())?;
     let platform = parse_platform(platform_str)?;
 
-    let mut derived = derive_runtime_lock(&root)?;
+    let mut derived = derive_runtime_lock(&root, source)?;
     let runtime = resolve_runtime_name(runtime_name, &derived.input.config)?;
     let delegate_executable =
         resolve_delegate_executable(delegate_executable, &derived.input.config)?;
@@ -268,6 +328,14 @@ pub(crate) fn build_artifact(
     validate_update_config(&derived.runtime_config, layout, install_name_source)?;
     derived.runtime_config.install_scheme =
         install_scheme.or(derived.runtime_config.install_scheme);
+    let paths = planned_artifact_paths(
+        &resolve_out_dir(&root, &out_dir),
+        &artifact_name,
+        layout,
+        target_label.as_deref(),
+        target.as_deref(),
+    );
+    paths.validate_source_inputs(&root, &derived.input, layout)?;
     let runtime_lock_path = generated_runtime_lock_path(&root);
     write_generated_runtime_lock(&runtime_lock_path, &derived.content)?;
 
@@ -317,8 +385,8 @@ pub(crate) fn run_artifact(
     root_override: Option<PathBuf>,
     args: Vec<OsString>,
 ) -> miette::Result<()> {
-    let root = project_root(root_override.as_deref())?;
-    let derived = derive_runtime_lock(&root)?;
+    let root = project_root(root_override.as_deref(), None)?;
+    let derived = derive_runtime_lock(&root, &SourceInput::default())?;
     let runtime = resolve_runtime_name(runtime_name, &derived.input.config)?;
     let layout = resolve_artifact_layout(artifact_layout, &derived.input.config);
     let bundle_env_var = runtime_data::runtime_env_var(&runtime, "BUNDLE");
@@ -339,6 +407,7 @@ pub(crate) fn run_artifact(
         installer,
         out_dir,
         Some(root.clone()),
+        &SourceInput::default(),
     )?;
 
     let mut command = std::process::Command::new(&output.binary);
@@ -418,8 +487,8 @@ pub(crate) fn inspect_artifact(
     json: bool,
     root_override: Option<PathBuf>,
 ) -> miette::Result<()> {
-    let root = project_root(root_override.as_deref())?;
-    let derived = derive_runtime_lock(&root)?;
+    let root = project_root(root_override.as_deref(), None)?;
+    let derived = derive_runtime_lock(&root, &SourceInput::default())?;
     let platform = parse_platform(platform_str)?;
     let runtime_lock_path = generated_runtime_lock_path(&root);
 

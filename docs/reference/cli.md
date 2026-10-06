@@ -37,6 +37,7 @@ graph. Its filename uses the artifact stem and ends in `.cdx.json`.
 
 ```bash
 cs build [--runtime-name RUNTIME] [--artifact-name NAME] \
+  [--manifest PATH] [--source-lock PATH] [--source-environment NAME] \
   [--delegate-executable EXECUTABLE] [--artifact-layout LAYOUT] [--target-label LABEL] \
   [--platform PLATFORM] [--target TRIPLE] [--template PATH] \
   [--runtime-version VERSION] [--docs-url URL] [--install-scheme SCHEME] \
@@ -54,6 +55,14 @@ runtime versions, see {doc}`names`.
 
 Options:
 
+- `--manifest PATH`: select an exact workspace manifest instead of discovering
+  one. Relative paths are resolved from the current directory. The selected
+  manifest supplies runtime configuration and the project root, even with `--root`.
+- `--source-lock PATH`: select a source lockfile independently of the manifest
+  format. Relative paths are resolved from the current directory. Local package
+  paths in the lockfile remain relative to that lockfile.
+- `--source-environment NAME`: override `[tool.conda-ship].source-environment`
+  for this build without changing the manifest or source lockfile.
 - `--runtime-name RUNTIME`: override `[tool.conda-ship].runtime-name`.
 - `--artifact-name NAME`: override `[tool.conda-ship].artifact-name` for the
   staged executable and artifact stem. When the flag is omitted, the manifest

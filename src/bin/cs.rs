@@ -145,6 +145,21 @@ struct RuntimeStampConfig {
     update: Option<runtime_data::RuntimeUpdateConfig>,
 }
 
+#[derive(clap::Args, Default)]
+struct SourceInput {
+    /// Exact source manifest to read (sets the project root to its directory)
+    #[arg(long)]
+    manifest: Option<PathBuf>,
+
+    /// Solved source lockfile to read instead of the manifest's default
+    #[arg(long)]
+    source_lock: Option<PathBuf>,
+
+    /// Solved environment to ship instead of the manifest's setting
+    #[arg(long)]
+    source_environment: Option<String>,
+}
+
 #[derive(Parser)]
 #[command(name = "cs", about = "Build ready-to-run conda runtimes")]
 struct Cli {
@@ -219,6 +234,9 @@ enum Command {
         /// Project root (default: auto-detect from current directory)
         #[arg(long)]
         root: Option<PathBuf>,
+
+        #[command(flatten)]
+        source: SourceInput,
     },
 
     /// Build and run a staged runtime for local smoke testing
@@ -397,6 +415,7 @@ fn run(cli: Cli) -> miette::Result<()> {
             out_dir,
             dry_run,
             root,
+            source,
         } => {
             if dry_run {
                 dry_run_build_artifact(
@@ -415,6 +434,7 @@ fn run(cli: Cli) -> miette::Result<()> {
                     installer,
                     out_dir,
                     root,
+                    &source,
                 )?;
                 return Ok(());
             }
@@ -434,6 +454,7 @@ fn run(cli: Cli) -> miette::Result<()> {
                 installer,
                 out_dir,
                 root,
+                &source,
             )?;
             eprintln!("metadata {}", output.info.display());
             eprintln!("checksums {}", output.checksums.display());

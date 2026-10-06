@@ -78,6 +78,17 @@ class ShipCommand:
                 return cli_path(self.options[index + 1], cwd)
         return None
 
+    def manifest_override(self, cwd: Path) -> Path | None:
+        """Return the explicit ``build --manifest`` path if present."""
+        if self.name != "build":
+            return None
+        for index, arg in enumerate(self.options):
+            if arg.startswith("--manifest="):
+                return cli_path(arg.partition("=")[2], cwd)
+            if arg == "--manifest" and index + 1 < len(self.options):
+                return cli_path(self.options[index + 1], cwd)
+        return None
+
     def with_runtime_version(self, version: str) -> list[str]:
         """Return ``argv`` with ``--runtime-version`` before run pass-through args."""
         insert_at = (
@@ -105,6 +116,17 @@ class CondaShipProject:
     ) -> CondaShipProject | None:
         """Discover the project selected by a command."""
         cwd = Path.cwd() if cwd is None else cwd
+        manifest_path = command.manifest_override(cwd)
+        if manifest_path is not None:
+            try:
+                manifest_data = read_toml(manifest_path)
+            except (OSError, tomllib.TOMLDecodeError) as error:
+                raise ProjectMetadataError(f"failed to read explicit manifest: {error}") from error
+            return cls(
+                root=manifest_path.parent,
+                manifest_path=manifest_path,
+                manifest_data=manifest_data,
+            )
         root = command.root_override(cwd)
         if root is not None:
             return cls.from_root(root)

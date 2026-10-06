@@ -27,7 +27,7 @@ use super::sbom::{creation_timestamp, render_cyclonedx_sbom};
 use super::{
     BundleLayout, Cli, Command, InstallNameConfig, InstallNameSource, InstallNameSourceConfig,
     RUNTIME_TEMPLATE_ENV, RuntimeStampConfig, RuntimeVersionConfig, RuntimeVersionSource,
-    ShipConfig, runtime_data,
+    ShipConfig, SourceInput, runtime_data,
 };
 
 fn make_pkg(name: &str, depends: &[&str]) -> CondaPackageData {
@@ -134,7 +134,7 @@ source-environment = "ship"
     .unwrap();
     std::fs::write(tmp.path().join("pixi.lock"), "").unwrap();
 
-    let input = discover_project_input(tmp.path()).unwrap();
+    let input = discover_project_input(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(input.lock_path, tmp.path().join("pixi.lock"));
     assert_eq!(input.config.runtime_name.as_deref(), Some("demo"));
@@ -165,7 +165,7 @@ source-environment = "ship"
     .unwrap();
     std::fs::write(tmp.path().join("conda.lock"), "").unwrap();
 
-    let input = discover_project_input(tmp.path()).unwrap();
+    let input = discover_project_input(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(input.lock_path, tmp.path().join("conda.lock"));
     assert_eq!(input.config.runtime_name.as_deref(), Some("demo"));
@@ -209,7 +209,7 @@ packages:
     )
     .unwrap();
 
-    let derived = derive_runtime_lock(tmp.path()).unwrap();
+    let derived = derive_runtime_lock(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(derived.source_environment, "ship");
     assert_eq!(derived.platforms, vec![Platform::Linux64]);
@@ -249,7 +249,7 @@ fn test_derive_runtime_lock_resolves_local_packages(
         tmp.path()
     };
 
-    let derived = derive_runtime_lock(root).unwrap();
+    let derived = derive_runtime_lock(root, &SourceInput::default()).unwrap();
 
     let env = derived.lock_file.default_environment().unwrap();
     let (_, mut packages) = env.conda_packages_by_platform().next().unwrap();
@@ -296,7 +296,7 @@ source-environment = "ship"
     .unwrap();
     std::fs::write(tmp.path().join("conda.lock"), "").unwrap();
 
-    let input = discover_project_input(tmp.path()).unwrap();
+    let input = discover_project_input(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(input.runtime_version, None);
     assert_eq!(
@@ -607,7 +607,7 @@ fn test_pixi_pyproject_wins_without_conda_workspace(#[case] conda_config: &str) 
     .unwrap();
     std::fs::write(tmp.path().join("pixi.lock"), "").unwrap();
 
-    let input = discover_project_input(tmp.path()).unwrap();
+    let input = discover_project_input(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(input.manifest_kind, ManifestKind::PixiPyproject);
     assert_eq!(input.lock_path, tmp.path().join("pixi.lock"));

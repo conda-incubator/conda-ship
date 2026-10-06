@@ -90,6 +90,65 @@ def test_runtime_version_args_uses_root_override(
     assert seen == [project]
 
 
+@pytest.mark.parametrize("filename", ["pixi.toml", "pyproject.toml"])
+@pytest.mark.parametrize(
+    "manifest_args",
+    [
+        ["--manifest", "project/{filename}"],
+        ["--manifest=project/{filename}"],
+        ["--manifest", "{project}/{filename}"],
+    ],
+    ids=["relative", "equals", "absolute"],
+)
+@pytest.mark.parametrize("root_args", [[], ["--root", "other"]], ids=["cwd", "root"])
+def test_runtime_version_args_uses_exact_manifest(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    filename,
+    manifest_args,
+    root_args,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    write_project(project, runtime_version='"1.0.0"')
+    (project / filename).write_text(
+        '[tool.conda-ship]\nruntime-version = { from = "project-metadata" }\n'
+        '[tool.pixi.workspace]\nname = "selected"\n',
+        encoding="utf-8",
+    )
+    other = tmp_path / "other"
+    other.mkdir()
+    write_project(other, runtime_version='"9.0.0"')
+    manifest_args = [arg.format(project=project, filename=filename) for arg in manifest_args]
+    seen = []
+
+    def fake_resolve(root):
+        seen.append(root)
+        return "2.3.4"
+
+    monkeypatch.setattr(project_metadata, "resolve_project_metadata_version", fake_resolve)
+    argv = ["build", *manifest_args, *root_args]
+
+    assert project_metadata.runtime_version_args(argv, cwd=tmp_path) == [
+        *argv,
+        "--runtime-version",
+        "2.3.4",
+    ]
+    assert seen == [project]
+
+
+@pytest.mark.parametrize("content", [None, "[invalid"], ids=["missing", "invalid-toml"])
+def test_runtime_version_args_does_not_fallback_from_invalid_manifest(tmp_path, content) -> None:
+    write_project(tmp_path, runtime_version='"1.0.0"')
+    if content is not None:
+        (tmp_path / "selected.toml").write_text(content, encoding="utf-8")
+
+    with pytest.raises(project_metadata.ProjectMetadataError, match="failed to read"):
+        project_metadata.runtime_version_args(
+            ["build", "--manifest", "selected.toml"], cwd=tmp_path
+        )
+
+
 def test_runtime_version_args_ignores_static_version(tmp_path) -> None:
     write_project(tmp_path, runtime_version='"1.2.3"')
 
