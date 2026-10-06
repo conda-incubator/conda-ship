@@ -107,6 +107,29 @@ Pass `--template` when you need an explicit release template asset, custom
 packaging path, or cross-build template. conda-ship does not search `PATH` for
 templates.
 
+## Select build inputs
+
+Use explicit inputs when another tool has already selected the manifest,
+source lockfile and solved environment:
+
+```bash
+cs build --manifest pixi.toml --source-lock release.lock --source-environment ship
+```
+
+The selected manifest supplies the runtime configuration. The source lock can
+have a different filename or live in another directory, and the environment
+flag overrides `[tool.conda-ship].source-environment` for this build. These
+options leave the source files unchanged.
+
+The recording uses an unreleased source build and the repository's committed
+lockfile. It selects `pixi.toml` even though `conda.toml` exists beside it.
+
+```{figure} ../../demos/input-selection.gif
+:alt: Terminal recording of explicit manifest, lockfile and environment selection, followed by unchanged source checksums.
+
+Build from explicitly selected inputs without editing them.
+```
+
 ## Run a smoke test
 
 Use `cs run` to build and immediately execute the staged runtime:
