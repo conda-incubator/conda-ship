@@ -69,23 +69,12 @@ class ShipCommand:
         """Return whether command options include ``--x`` or ``--x=value``."""
         return any(arg == option or arg.startswith(f"{option}=") for arg in self.options)
 
-    def root_override(self, cwd: Path) -> Path | None:
-        """Return the configured project root from ``--root`` if present."""
+    def path_option(self, option: str, cwd: Path) -> Path | None:
+        """Return a command option's path relative to the current directory."""
         for index, arg in enumerate(self.options):
-            if arg.startswith("--root="):
+            if arg.startswith(f"{option}="):
                 return cli_path(arg.partition("=")[2], cwd)
-            if arg == "--root" and index + 1 < len(self.options):
-                return cli_path(self.options[index + 1], cwd)
-        return None
-
-    def manifest_override(self, cwd: Path) -> Path | None:
-        """Return the explicit ``build --manifest`` path if present."""
-        if self.name != "build":
-            return None
-        for index, arg in enumerate(self.options):
-            if arg.startswith("--manifest="):
-                return cli_path(arg.partition("=")[2], cwd)
-            if arg == "--manifest" and index + 1 < len(self.options):
+            if arg == option and index + 1 < len(self.options):
                 return cli_path(self.options[index + 1], cwd)
         return None
 
@@ -116,7 +105,7 @@ class CondaShipProject:
     ) -> CondaShipProject | None:
         """Discover the project selected by a command."""
         cwd = Path.cwd() if cwd is None else cwd
-        manifest_path = command.manifest_override(cwd)
+        manifest_path = command.path_option("--manifest", cwd) if command.name == "build" else None
         if manifest_path is not None:
             try:
                 manifest_data = read_toml(manifest_path)
@@ -127,7 +116,7 @@ class CondaShipProject:
                 manifest_path=manifest_path,
                 manifest_data=manifest_data,
             )
-        root = command.root_override(cwd)
+        root = command.path_option("--root", cwd)
         if root is not None:
             return cls.from_root(root)
         return cls.discover(cwd)

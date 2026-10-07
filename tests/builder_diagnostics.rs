@@ -115,14 +115,9 @@ condarc-file = "runtime.condarc"
 }
 
 #[cfg(feature = "runtime-template")]
-fn project_with_local_package() -> TempDir {
-    use sha2::Digest;
-
+fn project_with_source_inputs() -> TempDir {
     let tmp = TempDir::new().unwrap();
     let platform = rattler_conda_types::Platform::current();
-    let package = tmp.path().join("demo-1.0-0.conda");
-    let contents = b"locked package contents";
-    std::fs::write(&package, contents).unwrap();
     std::fs::write(
         tmp.path().join("conda.toml"),
         "[tool.conda-ship]\nruntime-name = 'selected'\nruntime-version = '1.2.3'\ndelegate-executable = 'python'\nsource-environment = 'ship'\n",
@@ -131,9 +126,8 @@ fn project_with_local_package() -> TempDir {
     std::fs::write(
         tmp.path().join("source.lock"),
         format!(
-            "version: 6\nenvironments:\n  ship:\n    channels: []\n    packages:\n      {platform}:\n        - conda: {location}\npackages:\n  - conda: {location}\n    subdir: {platform}\n    sha256: {sha256}\n",
-            location = package.display(),
-            sha256 = sha2::Sha256::digest(contents).iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
+            "version: 6\nenvironments:\n  ship:\n    channels: []\n    packages:\n      {platform}:\n        - conda: demo-1.0-0.conda\npackages:\n  - conda: demo-1.0-0.conda\n    subdir: {platform}\n    sha256: {}\n",
+            "a".repeat(64),
         ),
     )
     .unwrap();
@@ -158,7 +152,7 @@ fn test_build_rejects_source_lock_output_collision(
     #[case] layout: &str,
     #[values(false, true)] dry_run: bool,
 ) {
-    let tmp = project_with_local_package();
+    let tmp = project_with_source_inputs();
     let manifest = tmp.path().join("conda.toml");
     let source_lock = tmp
         .path()
@@ -198,7 +192,7 @@ fn test_build_rejects_source_input_output_alias(
     #[case] source_symlink: bool,
     #[values("conda.toml", "source.lock")] input: &str,
 ) {
-    let tmp = project_with_local_package();
+    let tmp = project_with_source_inputs();
     let manifest = tmp.path().join("conda.toml");
     let source_lock = tmp.path().join("source.lock");
     let destination = tmp.path().join("target/conda-ship/runtime.lock");
