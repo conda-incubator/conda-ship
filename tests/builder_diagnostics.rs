@@ -37,6 +37,9 @@ source-environment = "missing"
 condarc-file = "runtime.condarc"
 "#;
     let platform = rattler_conda_types::Platform::current();
+    let package_path = locks.join(format!("channel/{platform}/demo-1.0-0.conda"));
+    std::fs::create_dir_all(package_path.parent().unwrap()).unwrap();
+    std::fs::write(&package_path, b"").unwrap();
     let lock = format!(
         "version: {lock_version}\nenvironments:\n  ship:\n    channels: []\n    packages:\n      {platform}:\n        - conda: channel/{platform}/demo-1.0-0.conda\npackages:\n  - conda: channel/{platform}/demo-1.0-0.conda\n    subdir: {platform}\n    sha256: {}\n",
         "a".repeat(64),
@@ -99,10 +102,13 @@ condarc-file = "runtime.condarc"
         let env = lock.default_environment().unwrap();
         let (_, mut packages) = env.conda_packages_by_platform().next().unwrap();
         let package = packages.next().unwrap();
-        let expected = locks.join(format!("channel/{platform}/demo-1.0-0.conda"));
-        assert_eq!(
-            std::path::Path::new(package.location().as_path().unwrap().as_str()),
-            expected
+        // Windows can serialize a verbatim path without its prefix.
+        assert!(
+            same_file::is_same_file(
+                package.location().as_path().unwrap().as_str(),
+                &package_path,
+            )
+            .unwrap()
         );
         let info: serde_json::Value = serde_json::from_slice(
             &std::fs::read(project.join("dist/selected.info.json")).unwrap(),
