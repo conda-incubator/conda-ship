@@ -27,7 +27,7 @@ use super::sbom::{creation_timestamp, render_cyclonedx_sbom};
 use super::{
     BundleLayout, Cli, Command, InstallNameConfig, InstallNameSource, InstallNameSourceConfig,
     RUNTIME_TEMPLATE_ENV, RuntimeStampConfig, RuntimeVersionConfig, RuntimeVersionSource,
-    ShipConfig, runtime_data,
+    ShipConfig, SourceInput, runtime_data,
 };
 
 fn make_pkg(name: &str, depends: &[&str]) -> CondaPackageData {
@@ -134,7 +134,7 @@ source-environment = "ship"
     .unwrap();
     std::fs::write(tmp.path().join("pixi.lock"), "").unwrap();
 
-    let input = discover_project_input(tmp.path()).unwrap();
+    let input = discover_project_input(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(input.lock_path, tmp.path().join("pixi.lock"));
     assert_eq!(input.config.runtime_name.as_deref(), Some("demo"));
@@ -165,7 +165,7 @@ source-environment = "ship"
     .unwrap();
     std::fs::write(tmp.path().join("conda.lock"), "").unwrap();
 
-    let input = discover_project_input(tmp.path()).unwrap();
+    let input = discover_project_input(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(input.lock_path, tmp.path().join("conda.lock"));
     assert_eq!(input.config.runtime_name.as_deref(), Some("demo"));
@@ -209,7 +209,7 @@ packages:
     )
     .unwrap();
 
-    let derived = derive_runtime_lock(tmp.path()).unwrap();
+    let derived = derive_runtime_lock(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(derived.source_environment, "ship");
     assert_eq!(derived.platforms, vec![Platform::Linux64]);
@@ -249,7 +249,7 @@ fn test_derive_runtime_lock_resolves_local_packages(
         tmp.path()
     };
 
-    let derived = derive_runtime_lock(root).unwrap();
+    let derived = derive_runtime_lock(root, &SourceInput::default()).unwrap();
 
     let env = derived.lock_file.default_environment().unwrap();
     let (_, mut packages) = env.conda_packages_by_platform().next().unwrap();
@@ -296,7 +296,7 @@ source-environment = "ship"
     .unwrap();
     std::fs::write(tmp.path().join("conda.lock"), "").unwrap();
 
-    let input = discover_project_input(tmp.path()).unwrap();
+    let input = discover_project_input(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(input.runtime_version, None);
     assert_eq!(
@@ -522,21 +522,87 @@ package = "demo-runtime"
     );
 }
 
-#[test]
-fn test_read_condarc_file_resolves_from_manifest_and_preserves_text() {
+#[rstest]
+fn test_read_condarc_file_resolves_from_manifest_and_preserves_text(
+    #[values(false, true)] absolute: bool,
+    #[values(false, true)] nested: bool,
+) {
     let tmp = TempDir::new().unwrap();
     let project = tmp.path().join("project");
     std::fs::create_dir(&project).unwrap();
     let manifest = project.join("conda.toml");
     std::fs::write(&manifest, "").unwrap();
     let expected = "# downstream policy\nchannels:\n  - conda-forge\n";
-    std::fs::write(project.join("runtime.condarc"), expected).unwrap();
+    let relative = if nested {
+        "config/runtime.condarc"
+    } else {
+        "runtime.condarc"
+    };
+    let path = project.join(relative);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, expected).unwrap();
 
-    let contents = read_condarc_file(&manifest, Some(Path::new("runtime.condarc")))
-        .unwrap()
-        .unwrap();
+    let contents = read_condarc_file(
+        &manifest,
+        Some(if absolute { &path } else { Path::new(relative) }),
+    )
+    .unwrap()
+    .unwrap();
 
     assert_eq!(contents, expected);
+}
+
+#[rstest]
+#[case::parent(false)]
+#[case::absolute(true)]
+fn test_read_condarc_file_rejects_external_paths(#[case] absolute: bool) {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let external = tmp.path().join("runtime.condarc");
+    std::fs::write(&external, "token: private-token\n").unwrap();
+    let path = if absolute {
+        external
+    } else {
+        "../runtime.condarc".into()
+    };
+
+    let error = read_condarc_file(&project.join("conda.toml"), Some(&path)).unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("must resolve inside the selected manifest directory")
+    );
+    assert!(!format!("{error:?}").contains("private-token"));
+}
+
+#[cfg(unix)]
+#[rstest]
+fn test_read_condarc_file_checks_symlink_destination(#[values(false, true)] external: bool) {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let destination = if external { tmp.path() } else { &project }.join("runtime.condarc");
+    let expected = "# retain this comment\nchannels: []\n";
+    std::fs::write(&destination, expected).unwrap();
+    std::os::unix::fs::symlink(&destination, project.join("linked.condarc")).unwrap();
+
+    let result = read_condarc_file(
+        &project.join("conda.toml"),
+        Some(Path::new("linked.condarc")),
+    );
+
+    if external {
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must resolve inside the selected manifest directory")
+        );
+    } else {
+        assert_eq!(result.unwrap().as_deref(), Some(expected));
+    }
 }
 
 #[rstest]
@@ -553,6 +619,57 @@ fn test_read_condarc_file_rejects_invalid_input(#[case] contents: &str, #[case] 
         .to_string();
 
     assert!(error.contains(expected), "{error}");
+}
+
+#[cfg(unix)]
+#[rstest]
+fn test_read_condarc_file_during_replacement(#[values(false, true)] replace_directory: bool) {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("project");
+    let config = project.join("config");
+    let outside = tmp.path().join("outside");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    let safe = "channels: []\n";
+    std::fs::write(config.join("runtime.condarc"), safe).unwrap();
+    std::fs::write(outside.join("runtime.condarc"), "token: private-token\n").unwrap();
+    let manifest = project.join("conda.toml");
+    let writer = std::thread::spawn(move || {
+        for _ in 0..2000 {
+            if replace_directory {
+                std::fs::rename(&config, project.join("saved")).unwrap();
+                std::os::unix::fs::symlink(&outside, &config).unwrap();
+                std::fs::remove_file(&config).unwrap();
+                std::fs::rename(project.join("saved"), &config).unwrap();
+            } else {
+                let path = config.join("runtime.condarc");
+                let swap = config.join("swap");
+                std::os::unix::fs::symlink(outside.join("runtime.condarc"), &swap).unwrap();
+                std::fs::rename(&swap, &path).unwrap();
+                std::fs::write(&swap, safe).unwrap();
+                std::fs::rename(&swap, &path).unwrap();
+            }
+        }
+    });
+    let results: Vec<_> = (0..4000)
+        .filter_map(|_| {
+            read_condarc_file(&manifest, Some(Path::new("config/runtime.condarc")))
+                .ok()
+                .flatten()
+        })
+        .collect();
+    writer.join().unwrap();
+
+    assert!(
+        results.iter().all(|contents| contents == safe),
+        "external condarc contents were read"
+    );
+    assert_eq!(
+        read_condarc_file(&manifest, Some(Path::new("config/runtime.condarc")))
+            .unwrap()
+            .as_deref(),
+        Some(safe)
+    );
 }
 
 #[rstest]
@@ -607,7 +724,7 @@ fn test_pixi_pyproject_wins_without_conda_workspace(#[case] conda_config: &str) 
     .unwrap();
     std::fs::write(tmp.path().join("pixi.lock"), "").unwrap();
 
-    let input = discover_project_input(tmp.path()).unwrap();
+    let input = discover_project_input(tmp.path(), &SourceInput::default()).unwrap();
 
     assert_eq!(input.manifest_kind, ManifestKind::PixiPyproject);
     assert_eq!(input.lock_path, tmp.path().join("pixi.lock"));

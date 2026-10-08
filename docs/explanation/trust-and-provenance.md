@@ -33,14 +33,20 @@ workflow runs.
 
 ## Package archive trust
 
-The runtime lock contains concrete package records. For bundle builds,
-conda-ship requires SHA256 metadata so downloaded package archives can be
-verified.
+The runtime lock contains concrete package records. Every artifact layout
+requires SHA256 metadata for each shipped package. MD5 alone is insufficient.
+The runtime also rejects records without SHA256 before installation.
+
+Selected package and channel URLs must not contain credentials, Anaconda
+`/t/<token>` path segments, queries, or fragments. These URLs are distributed
+with the runtime. Supply download credentials through `RATTLER_AUTH_FILE`
+instead. Downloads reject redirects from HTTPS to an insecure scheme.
 
 During bootstrap:
 
 - online installs use the stamped runtime lock
-- external bundle installs match local package archives to the lock
+- external bundle installs copy local package archives into private temporary
+  files, verify their SHA256 values, and import those same copies into the cache
 - embedded bundle installs verify the embedded bundle before extraction
 
 The runtime rejects package archive mismatches instead of silently installing
@@ -158,7 +164,8 @@ signatures explain who produced that asset set and from which workflow.
 
 ## Authentication and offline updates
 
-Stamped update channel URLs cannot contain credentials, a query, or a fragment.
+Stamped update channel URLs cannot contain credentials, including Anaconda
+`/t/<token>` path segments, a query, or a fragment.
 HTTPS requests can read credentials from the explicit JSON file selected with
 `RATTLER_AUTH_FILE`. This build does not enable keyring, netrc, or default
 auth-file discovery. The runtime does not implement an interactive provider

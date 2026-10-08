@@ -114,6 +114,8 @@ notify_outdated_conda: false
 show_channel_urls: true
 ```
 
+The file must resolve inside the selected manifest directory. Paths that escape
+it through `..`, an absolute path, or a symbolic link are rejected.
 The builder validates that the file contains a YAML mapping and stamps its
 exact text. It does not derive or merge lockfile channels into this file.
 Omitting `condarc-file` leaves `.condarc` alone. Leaving `freeze-base` false

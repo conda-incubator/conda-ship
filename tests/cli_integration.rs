@@ -190,17 +190,50 @@ fn test_runtime_offline_env_var_parsing(#[case] value: &str, #[case] offline: bo
         .stderr(predicate::str::contains(expected));
 }
 
-#[test]
-fn test_stamped_runtime_delegates_help_to_configured_executable() {
+#[rstest]
+#[case::direct(false)]
+#[case::build_and_run(true)]
+fn test_stamped_runtime_delegates_help_to_configured_executable(#[case] run: bool) {
     let tmp = TempDir::new().unwrap();
-    let binary = build_stamped_runtime(&tmp, "cs");
     let prefix = tmp.path().join("prefix");
     std::fs::create_dir_all(prefix.join("conda-meta")).unwrap();
     write_demo_runtime_metadata(&prefix);
     install_cs_delegate(&prefix);
 
-    assert_cmd::Command::new(binary)
-        .env("DEMO_PREFIX", &prefix)
+    let mut command = if run {
+        let mut command = cargo_bin_cmd!("cs");
+        command
+            .env(
+                "CONDA_SHIP_TEMPLATE",
+                assert_cmd::cargo::cargo_bin!("cs-template"),
+            )
+            .env("DEMO_PREFIX", tmp.path())
+            .args([
+                "run",
+                "--root",
+                env!("CARGO_MANIFEST_DIR"),
+                "--runtime-name",
+                "demo",
+                "--delegate-executable",
+                "cs",
+                "--runtime-version",
+                "9.8.7",
+            ])
+            .arg("--out-dir")
+            .arg(tmp.path().join("dist"))
+            .arg("--install-path")
+            .arg(&prefix)
+            .arg("--");
+        command
+    } else {
+        let binary = build_stamped_runtime(&tmp, "cs");
+        let mut command = assert_cmd::Command::new(binary);
+        command.env("DEMO_PREFIX", &prefix);
+        command
+    };
+    command
+        .env_remove("CONDA_SHIP_PREFIX")
+        .env("DEMO_OFFLINE", "1")
         .arg("--help")
         .assert()
         .success()

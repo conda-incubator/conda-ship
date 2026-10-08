@@ -62,6 +62,7 @@ class ShipCommand:
         return not (
             self.has_option("-h")
             or self.has_option("--help")
+            or self.has_option("--dry-run")
             or self.has_option("--runtime-version")
         )
 
@@ -69,12 +70,12 @@ class ShipCommand:
         """Return whether command options include ``--x`` or ``--x=value``."""
         return any(arg == option or arg.startswith(f"{option}=") for arg in self.options)
 
-    def root_override(self, cwd: Path) -> Path | None:
-        """Return the configured project root from ``--root`` if present."""
+    def path_option(self, option: str, cwd: Path) -> Path | None:
+        """Return a command option's path relative to the current directory."""
         for index, arg in enumerate(self.options):
-            if arg.startswith("--root="):
+            if arg.startswith(f"{option}="):
                 return cli_path(arg.partition("=")[2], cwd)
-            if arg == "--root" and index + 1 < len(self.options):
+            if arg == option and index + 1 < len(self.options):
                 return cli_path(self.options[index + 1], cwd)
         return None
 
@@ -105,7 +106,24 @@ class CondaShipProject:
     ) -> CondaShipProject | None:
         """Discover the project selected by a command."""
         cwd = Path.cwd() if cwd is None else cwd
-        root = command.root_override(cwd)
+        manifest_path = command.path_option("--manifest", cwd) if command.name == "build" else None
+        if manifest_path is not None:
+            if manifest_path.name not in {"conda.toml", "pixi.toml", "pyproject.toml"}:
+                return None
+            try:
+                manifest_data = read_toml(manifest_path)
+            except (OSError, tomllib.TOMLDecodeError) as error:
+                raise ProjectMetadataError(f"failed to read explicit manifest: {error}") from error
+            if manifest_path.name == "pyproject.toml" and not cls.supports_pyproject(
+                manifest_data
+            ):
+                return None
+            return cls(
+                root=manifest_path.parent,
+                manifest_path=manifest_path,
+                manifest_data=manifest_data,
+            )
+        root = command.path_option("--root", cwd)
         if root is not None:
             return cls.from_root(root)
         return cls.discover(cwd)

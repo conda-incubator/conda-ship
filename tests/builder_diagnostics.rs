@@ -1,9 +1,425 @@
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(
+    feature = "runtime-template",
+    target_os = "macos",
+    target_os = "windows"
+))]
 use assert_cmd::cargo::cargo_bin;
 use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use rstest::rstest;
 use tempfile::TempDir;
+
+#[cfg(feature = "runtime-template")]
+#[rstest]
+fn test_build_selects_explicit_inputs_without_changing_them(
+    #[values("conda.toml", "pixi.toml", "pyproject.toml")] manifest_name: &str,
+    #[values(1, 6)] lock_version: u8,
+    #[values(false, true)] absolute_paths: bool,
+    #[values(false, true)] dry_run: bool,
+) {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let project = root.join("project");
+    let locks = root.as_path().join("locks");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::create_dir(&locks).unwrap();
+    let manifest_path = project.join(manifest_name);
+    let source_lock_path = locks.join("selected.lock");
+    let manifest = r#"
+[tool.conda.workspace]
+name = "demo"
+
+[tool.conda-ship]
+runtime-name = "selected"
+runtime-version = "1.2.3"
+delegate-executable = "python"
+source-environment = "missing"
+condarc-file = "runtime.condarc"
+"#;
+    let platform = rattler_conda_types::Platform::current();
+    let package_path = locks.join(format!("channel/{platform}/demo-1.0-0.conda"));
+    std::fs::create_dir_all(package_path.parent().unwrap()).unwrap();
+    std::fs::write(&package_path, b"").unwrap();
+    let lock = format!(
+        "version: {lock_version}\nenvironments:\n  ship:\n    channels: []\n    packages:\n      {platform}:\n        - conda: channel/{platform}/demo-1.0-0.conda\npackages:\n  - conda: channel/{platform}/demo-1.0-0.conda\n    subdir: {platform}\n    sha256: {}\n",
+        "a".repeat(64),
+    );
+    std::fs::write(&manifest_path, manifest).unwrap();
+    std::fs::write(&source_lock_path, &lock).unwrap();
+    std::fs::write(project.join("runtime.condarc"), "channels: []\n").unwrap();
+    if manifest_name != "conda.toml" {
+        std::fs::write(project.join("conda.toml"), "invalid TOML").unwrap();
+    }
+    let manifest_arg = if absolute_paths {
+        manifest_path.clone()
+    } else {
+        manifest_path
+            .strip_prefix(root.as_path())
+            .unwrap()
+            .to_path_buf()
+    };
+    let lock_arg = if absolute_paths {
+        source_lock_path.clone()
+    } else {
+        source_lock_path
+            .strip_prefix(root.as_path())
+            .unwrap()
+            .to_path_buf()
+    };
+    let mut command = cargo_bin_cmd!("cs");
+    command
+        .current_dir(root.as_path())
+        .arg("build")
+        .arg("--manifest")
+        .arg(manifest_arg)
+        .arg("--source-lock")
+        .arg(lock_arg)
+        .args([
+            "--source-environment",
+            "ship",
+            "--platform",
+            platform.as_str(),
+        ])
+        .arg("--template")
+        .arg(cargo_bin!("cs-template"));
+    if dry_run {
+        command.arg("--dry-run");
+    }
+
+    command.assert().success();
+
+    assert_eq!(std::fs::read_to_string(&manifest_path).unwrap(), manifest);
+    assert_eq!(std::fs::read_to_string(&source_lock_path).unwrap(), lock);
+    assert!(!root.as_path().join("dist").exists());
+    if dry_run {
+        assert!(!project.join("dist").exists());
+        assert!(!project.join("target").exists());
+    } else {
+        let runtime_lock =
+            std::fs::read_to_string(project.join("dist/selected.runtime.lock")).unwrap();
+        let lock =
+            rattler_lock::LockFile::from_str_with_base_directory(&runtime_lock, None).unwrap();
+        let env = lock.default_environment().unwrap();
+        let (_, mut packages) = env.conda_packages_by_platform().next().unwrap();
+        let package = packages.next().unwrap();
+        // Windows can serialize a verbatim path without its prefix.
+        assert!(
+            same_file::is_same_file(
+                package.location().as_path().unwrap().as_str(),
+                &package_path,
+            )
+            .unwrap()
+        );
+        let info: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(project.join("dist/selected.info.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(info["runtime_version"], "1.2.3");
+        assert_eq!(info["package_count"], 1);
+        assert!(project.join("dist/selected.cdx.json").is_file());
+    }
+}
+
+#[cfg(feature = "runtime-template")]
+fn project_with_source_inputs() -> TempDir {
+    let tmp = TempDir::new().unwrap();
+    let platform = rattler_conda_types::Platform::current();
+    std::fs::write(
+        tmp.path().join("conda.toml"),
+        "[tool.conda-ship]\nruntime-name = 'selected'\nruntime-version = '1.2.3'\ndelegate-executable = 'python'\nsource-environment = 'ship'\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join("source.lock"),
+        format!(
+            "version: 6\nenvironments:\n  ship:\n    channels: []\n    packages:\n      {platform}:\n        - conda: demo-1.0-0.conda\npackages:\n  - conda: demo-1.0-0.conda\n    subdir: {platform}\n    sha256: {}\n",
+            "a".repeat(64),
+        ),
+    )
+    .unwrap();
+    tmp
+}
+
+#[cfg(feature = "runtime-template")]
+#[rstest]
+#[case::missing("")]
+#[case::md5_only("    md5: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")]
+fn test_build_requires_sha256_before_writing_artifacts(
+    #[case] hashes: &str,
+    #[values("online", "external", "embedded")] layout: &str,
+    #[values(false, true)] dry_run: bool,
+) {
+    let tmp = project_with_source_inputs();
+    let lock_path = tmp.path().join("source.lock");
+    let lock = std::fs::read_to_string(&lock_path)
+        .unwrap()
+        .replace(&format!("    sha256: {}\n", "a".repeat(64)), hashes);
+    std::fs::write(&lock_path, &lock).unwrap();
+    let mut command = cargo_bin_cmd!("cs");
+    command.current_dir(tmp.path()).args([
+        "build",
+        "--manifest",
+        "conda.toml",
+        "--source-lock",
+        "source.lock",
+        "--artifact-layout",
+        layout,
+    ]);
+    if dry_run {
+        command.arg("--dry-run");
+    }
+
+    command.assert().failure().stderr(predicate::str::contains(
+        "cannot ship packages without SHA256 hashes",
+    ));
+
+    assert_eq!(std::fs::read_to_string(lock_path).unwrap(), lock);
+    assert!(!tmp.path().join("dist").exists());
+    assert!(!tmp.path().join("target").exists());
+}
+
+#[cfg(feature = "runtime-template")]
+#[rstest]
+#[case::userinfo("https://user:private-token@example.test/channel", "credentials")]
+#[case::token("https://example.test/t/private-token/channel", "credentials")]
+#[case::encoded_token("https://example.test/channel%252ft%252fprivate-token", "credentials")]
+#[case::query(
+    "https://example.test/channel?token=private-token",
+    "query or fragment"
+)]
+#[case::fragment("https://example.test/channel#private-token", "query or fragment")]
+fn test_build_rejects_credential_urls_before_writing_artifacts(
+    #[case] url: &str,
+    #[case] reason: &str,
+    #[values(false, true)] channel: bool,
+    #[values(false, true)] dry_run: bool,
+) {
+    let tmp = project_with_source_inputs();
+    let lock_path = tmp.path().join("source.lock");
+    let mut lock = std::fs::read_to_string(&lock_path).unwrap();
+    if channel {
+        lock = lock.replace("channels: []", &format!("channels:\n      - url: {url}"));
+    } else {
+        let mut package_url = reqwest::Url::parse(url).unwrap();
+        package_url.set_path(&format!("{}/demo-1.0-0.conda", package_url.path()));
+        lock = lock.replace("demo-1.0-0.conda", package_url.as_str());
+    }
+    std::fs::write(&lock_path, &lock).unwrap();
+    let mut command = cargo_bin_cmd!("cs");
+    command.current_dir(tmp.path()).args([
+        "build",
+        "--manifest",
+        "conda.toml",
+        "--source-lock",
+        "source.lock",
+    ]);
+    if dry_run {
+        command.arg("--dry-run");
+    }
+
+    let output = command.output().unwrap();
+
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains(reason), "{error}");
+    assert!(!error.contains("private-token"));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("private-token"));
+    assert_eq!(std::fs::read_to_string(lock_path).unwrap(), lock);
+    assert!(!tmp.path().join("dist").exists());
+    assert!(!tmp.path().join("target").exists());
+}
+
+#[cfg(feature = "runtime-template")]
+#[rstest]
+#[case::token("https://example.test/t/private-token/channel")]
+#[case::dot_segments("https://example.test/t/private-token/../../channel")]
+#[case::encoded_dot_segments("https://example.test/t/private-token/%2e%2e/%2e%2e/channel")]
+fn test_build_rejects_raw_channel_credentials(
+    #[case] channel: &str,
+    #[values(false, true)] update: bool,
+) {
+    let tmp = project_with_source_inputs();
+    if update {
+        let path = tmp.path().join("conda.toml");
+        let manifest = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(path, format!("{manifest}\n[tool.conda-ship.update]\nchannel = '{channel}'\npackage = 'demo-runtime'\n")).unwrap();
+    } else {
+        let path = tmp.path().join("source.lock");
+        let lock = std::fs::read_to_string(&path).unwrap().replace(
+            "channels: []",
+            &format!("channels:\n      - url: {channel}"),
+        );
+        std::fs::write(path, lock).unwrap();
+    }
+
+    let output = cargo_bin_cmd!("cs")
+        .current_dir(tmp.path())
+        .args([
+            "build",
+            "--manifest",
+            "conda.toml",
+            "--source-lock",
+            "source.lock",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("must not contain credentials"), "{error}");
+    assert!(!error.contains("private-token"));
+    assert!(!tmp.path().join("dist").exists());
+    assert!(!tmp.path().join("target").exists());
+}
+
+#[cfg(feature = "runtime-template")]
+#[rstest]
+#[case::excluded(true)]
+#[case::unselected(false)]
+fn test_build_ignores_unshipped_unsafe_packages(#[case] excluded: bool) {
+    let tmp = project_with_source_inputs();
+    let manifest_path = tmp.path().join("conda.toml");
+    if excluded {
+        let manifest = std::fs::read_to_string(&manifest_path).unwrap();
+        std::fs::write(
+            &manifest_path,
+            format!("{manifest}exclude-packages = ['unused']\n"),
+        )
+        .unwrap();
+    }
+    let platform = rattler_conda_types::Platform::current();
+    let unsafe_url =
+        format!("https://user:private-token@example.test/{platform}/unused-1.0-0.conda");
+    let lock_path = tmp.path().join("source.lock");
+    let mut lock = std::fs::read_to_string(&lock_path)
+        .unwrap()
+        .replace("channels: []", "channels:\n      - url: conda-forge");
+    let extra_environment = if excluded {
+        format!("        - conda: {unsafe_url}\n")
+    } else {
+        format!(
+            "  unused:\n    channels: []\n    packages:\n      {platform}:\n        - conda: {unsafe_url}\n"
+        )
+    };
+    lock = lock.replace(
+        "\npackages:\n",
+        &format!("\n{extra_environment}packages:\n"),
+    );
+    lock.push_str(&format!(
+        "  - conda: {unsafe_url}\n    subdir: {platform}\n"
+    ));
+    std::fs::write(&lock_path, lock).unwrap();
+
+    cargo_bin_cmd!("cs")
+        .current_dir(tmp.path())
+        .args([
+            "build",
+            "--manifest",
+            "conda.toml",
+            "--source-lock",
+            "source.lock",
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("private-token").not());
+}
+
+#[cfg(feature = "runtime-template")]
+#[rstest]
+#[case::generated_lock("target/conda-ship/runtime.lock", "online")]
+#[case::generated_bundle("target/conda-ship/bundle.tar.zst", "embedded")]
+#[case::bundle_directory("target/conda-ship/bundle/source.lock", "external")]
+#[case::published_lock("dist/selected.runtime.lock", "online")]
+#[case::published_binary("dist/selected{exe}", "online")]
+#[case::published_info("dist/selected.info.json", "online")]
+#[case::published_checksums("dist/selected.sha256", "online")]
+#[case::published_packages("dist/selected.packages.txt", "online")]
+#[case::published_sbom("dist/selected.cdx.json", "online")]
+#[case::retired_bundle("dist/selected.bundle.tar.zst", "online")]
+#[case::published_bundle("dist/selected.bundle.tar.zst", "external")]
+fn test_build_rejects_source_lock_output_collision(
+    #[case] destination: &str,
+    #[case] layout: &str,
+    #[values(false, true)] dry_run: bool,
+) {
+    let tmp = project_with_source_inputs();
+    let manifest = tmp.path().join("conda.toml");
+    let source_lock = tmp
+        .path()
+        .join(destination.replace("{exe}", std::env::consts::EXE_SUFFIX));
+    std::fs::create_dir_all(source_lock.parent().unwrap()).unwrap();
+    std::fs::rename(tmp.path().join("source.lock"), &source_lock).unwrap();
+    let original_manifest = std::fs::read(&manifest).unwrap();
+    let original_lock = std::fs::read(&source_lock).unwrap();
+    let state_lock = tmp.path().join("target/conda-ship/runtime.lock");
+    let original_state_lock = std::fs::read(&state_lock).ok();
+    let mut command = cargo_bin_cmd!("cs");
+    command
+        .current_dir(tmp.path())
+        .arg("build")
+        .args(["--manifest", "conda.toml", "--source-lock"])
+        .arg(&source_lock)
+        .args(["--artifact-layout", layout, "--template"])
+        .arg(cargo_bin!("cs-template"));
+    if dry_run {
+        command.arg("--dry-run");
+    }
+
+    let output = command.output().unwrap();
+
+    assert_eq!(std::fs::read(&manifest).unwrap(), original_manifest);
+    assert_eq!(std::fs::read(&source_lock).unwrap(), original_lock);
+    assert_eq!(std::fs::read(&state_lock).ok(), original_state_lock);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("build output"));
+}
+
+#[cfg(feature = "runtime-template")]
+#[rstest]
+#[case::hard_link(false)]
+#[cfg_attr(unix, case::source_symlink(true))]
+fn test_build_rejects_source_input_output_alias(
+    #[case] source_symlink: bool,
+    #[values("conda.toml", "source.lock")] input: &str,
+) {
+    let tmp = project_with_source_inputs();
+    let manifest = tmp.path().join("conda.toml");
+    let source_lock = tmp.path().join("source.lock");
+    let destination = tmp.path().join("target/conda-ship/runtime.lock");
+    std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+    if source_symlink {
+        #[cfg(unix)]
+        {
+            std::fs::rename(tmp.path().join(input), &destination).unwrap();
+            std::os::unix::fs::symlink(&destination, tmp.path().join(input)).unwrap();
+        }
+    } else {
+        std::fs::hard_link(tmp.path().join(input), &destination).unwrap();
+    }
+    let original_manifest = std::fs::read(&manifest).unwrap();
+    let original_lock = std::fs::read(&source_lock).unwrap();
+
+    let output = cargo_bin_cmd!("cs")
+        .current_dir(tmp.path())
+        .args([
+            "build",
+            "--manifest",
+            "conda.toml",
+            "--source-lock",
+            "source.lock",
+            "--template",
+        ])
+        .arg(cargo_bin!("cs-template"))
+        .output()
+        .unwrap();
+
+    assert_eq!(std::fs::read(&manifest).unwrap(), original_manifest);
+    assert_eq!(std::fs::read(&source_lock).unwrap(), original_lock);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("build output"));
+    assert!(!tmp.path().join("dist").exists());
+}
 
 fn project_with_pypi_packages(source_environment: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();

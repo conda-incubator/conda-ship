@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use cap_std::fs::Dir;
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::{PackageName, PackageRecord, Platform};
 use rattler_lock::{CondaPackageData, LockFile, LockFileBuilder, PlatformData, UrlOrPath};
@@ -8,9 +9,19 @@ use rattler_lock::{CondaPackageData, LockFile, LockFileBuilder, PlatformData, Ur
 use super::diagnostic::{DiagnosticKind, ship_error};
 use super::{
     ProjectManifest, RuntimeStampConfig, RuntimeVersionConfig, RuntimeVersionSource, ShipConfig,
+    SourceInput,
 };
 
-pub(crate) fn project_root(override_root: Option<&Path>) -> miette::Result<PathBuf> {
+pub(crate) fn project_root(
+    override_root: Option<&Path>,
+    manifest: Option<&Path>,
+) -> miette::Result<PathBuf> {
+    if let Some(manifest) = manifest {
+        let manifest = std::path::absolute(manifest)
+            .into_diagnostic()
+            .context("failed to resolve source manifest path")?;
+        return Ok(manifest.parent().unwrap_or(Path::new(".")).to_path_buf());
+    }
     if let Some(root) = override_root {
         return Ok(root.to_path_buf());
     }
@@ -90,14 +101,17 @@ impl ManifestKind {
     }
 }
 
-pub(crate) fn derive_runtime_lock(root: &Path) -> miette::Result<DerivedRuntimeLock> {
-    let input = discover_project_input(root)?;
+pub(crate) fn derive_runtime_lock(
+    root: &Path,
+    source: &SourceInput,
+) -> miette::Result<DerivedRuntimeLock> {
+    let input = discover_project_input(root, source)?;
     let condarc = read_condarc_file(&input.manifest_path, input.config.condarc_file.as_deref())?;
     let lock_content = std::fs::read_to_string(&input.lock_path)
         .into_diagnostic()
         .with_context(|| format!("failed to read {}", input.lock_path.display()))?;
 
-    let lock_file = parse_lock(&lock_content, &input.lock_path, input.manifest_kind)?;
+    let lock_file = parse_lock(&lock_content, &input.lock_path)?;
 
     let source_environment = input.config.source_environment.as_deref().ok_or_else(|| {
         ship_error(
@@ -147,6 +161,9 @@ pub(crate) fn derive_runtime_lock(root: &Path) -> miette::Result<DerivedRuntimeL
         .with_platforms(platform_data)
         .into_diagnostic()
         .context("failed to initialize runtime lock platforms")?;
+    for channel in runtime_env.channels() {
+        crate::http::validate_artifact_url(&channel.url, "source lockfile channel URL")?;
+    }
     if !runtime_env.channels().is_empty() {
         builder.set_channels("default", runtime_env.channels().iter().cloned());
     }
@@ -172,8 +189,12 @@ pub(crate) fn derive_runtime_lock(root: &Path) -> miette::Result<DerivedRuntimeL
             total_excluded += removed.len();
             kept
         };
+        validate_package_hashes(&filtered)?;
         total_packages += filtered.len();
         for mut pkg in filtered {
+            if let Some(url) = pkg.location().as_url() {
+                crate::http::validate_artifact_url(url.as_str(), "source lockfile package URL")?;
+            }
             if let CondaPackageData::Binary(binary) = &mut pkg
                 && let Some(path) = binary.location.as_path()
                 && !path.is_absolute()
@@ -243,11 +264,27 @@ pub(crate) fn read_condarc_file(
     let Some(configured_path) = configured_path else {
         return Ok(None);
     };
-    let path = manifest_path
+    let project_dir = manifest_path
         .parent()
-        .unwrap_or_else(|| Path::new(""))
-        .join(configured_path);
-    let contents = std::fs::read_to_string(&path)
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .canonicalize()
+        .into_diagnostic()
+        .context("failed to resolve manifest directory for condarc-file")?;
+    let directory = Dir::open_ambient_dir(&project_dir, cap_std::ambient_authority())
+        .into_diagnostic()
+        .context("failed to open manifest directory for condarc-file")?;
+    let path = project_dir
+        .join(configured_path)
+        .canonicalize()
+        .into_diagnostic()
+        .context("failed to read condarc-file")?;
+    let relative = path.strip_prefix(&project_dir).map_err(|_| {
+        miette::miette!("condarc-file must resolve inside the selected manifest directory")
+    })?;
+    // Resolve from the open directory so concurrent symlink replacement cannot escape it.
+    let contents = directory
+        .read_to_string(relative)
         .into_diagnostic()
         .with_context(|| format!("failed to read condarc-file {}", path.display()))?;
     let document: serde_yaml::Value = serde_yaml::from_str(&contents)
@@ -262,11 +299,52 @@ pub(crate) fn read_condarc_file(
     Ok(Some(contents))
 }
 
-pub(crate) fn discover_project_input(root: &Path) -> miette::Result<ProjectInput> {
-    let manifest_path = discover_manifest_path(root)?;
+pub(crate) fn validate_package_hashes<'a>(
+    packages: impl IntoIterator<Item = &'a CondaPackageData>,
+) -> miette::Result<()> {
+    let mut missing = Vec::new();
+    for pkg in packages {
+        let record = package_record(pkg)?;
+        if record.sha256.is_none() {
+            missing.push(record.name.as_normalized().to_string());
+        }
+    }
+    missing.sort();
+    missing.dedup();
+    if !missing.is_empty() {
+        return Err(ship_error(
+            DiagnosticKind::MissingSha256,
+            format!(
+                "cannot ship packages without SHA256 hashes in the source lockfile: {}",
+                missing.join(", ")
+            ),
+            Some(
+                "Refresh the source lockfile with SHA256 package hashes before building a runtime."
+                    .to_string(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn discover_project_input(
+    root: &Path,
+    source: &SourceInput,
+) -> miette::Result<ProjectInput> {
+    let manifest_path = match source.manifest.as_deref() {
+        Some(path) => std::path::absolute(path)
+            .into_diagnostic()
+            .context("failed to resolve source manifest path")?,
+        None => discover_manifest_path(root)?,
+    };
     let kind = manifest_kind(&manifest_path)?;
 
-    let lock_path = root.join(kind.lockfile_name());
+    let lock_path = match source.source_lock.as_deref() {
+        Some(path) => std::path::absolute(path)
+            .into_diagnostic()
+            .context("failed to resolve source lockfile path")?,
+        None => root.join(kind.lockfile_name()),
+    };
     if !lock_path.exists() {
         return Err(ship_error(
             DiagnosticKind::MissingLockfile,
@@ -290,6 +368,9 @@ pub(crate) fn discover_project_input(root: &Path) -> miette::Result<ProjectInput
         .into_diagnostic()
         .with_context(|| format!("failed to parse {}", manifest_path.display()))?;
     let mut config = manifest.tool.conda_ship;
+    if let Some(environment) = &source.source_environment {
+        config.source_environment = Some(environment.clone());
+    }
     let project_dynamic_version = manifest
         .project
         .dynamic
@@ -408,17 +489,9 @@ pub(crate) fn write_generated_runtime_lock(path: &Path, content: &str) -> miette
     Ok(())
 }
 
-fn parse_lock(
-    lock_content: &str,
-    lock_path: &Path,
-    manifest_kind: ManifestKind,
-) -> miette::Result<LockFile> {
+fn parse_lock(lock_content: &str, lock_path: &Path) -> miette::Result<LockFile> {
     let rewritten;
-    let parse_content = if matches!(
-        manifest_kind,
-        ManifestKind::CondaToml | ManifestKind::CondaPyproject
-    ) && let Some(content) =
-        conda_workspaces_lock_v1_as_rattler_v6(lock_content)?
+    let parse_content = if let Some(content) = conda_workspaces_lock_v1_as_rattler_v6(lock_content)?
     {
         rewritten = content;
         &rewritten

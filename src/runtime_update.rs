@@ -987,16 +987,7 @@ fn validate_update_config(update: &RuntimeUpdateConfig) -> miette::Result<()> {
             "runtime update channel must use https:// or file://"
         ));
     }
-    if !url.username().is_empty() || url.password().is_some() {
-        return Err(miette::miette!(
-            "runtime update channel must not contain credentials"
-        ));
-    }
-    if url.query().is_some() || url.fragment().is_some() {
-        return Err(miette::miette!(
-            "runtime update channel must not contain a query or fragment"
-        ));
-    }
+    http::validate_artifact_url(&update.channel, "runtime update channel")?;
     PackageName::from_str(&update.package)
         .into_diagnostic()
         .context("failed to parse runtime update package name")?;
