@@ -128,15 +128,15 @@ Fix by either:
 
 Cross-builds require an explicit template for the requested target.
 
-## Bundle build missing SHA256 data
+## Build missing SHA256 data
 
 Error:
 
 ```text
-cannot bundle packages without SHA256 hashes
+cannot ship packages without SHA256 hashes
 ```
 
-External and embedded layouts need package hashes so package archives can be
+All layouts need SHA256 package hashes so package archives can be
 verified. Refresh the source lockfile with a tool/version that records SHA256
 metadata for the selected packages.
 

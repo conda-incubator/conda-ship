@@ -213,7 +213,9 @@ For the naming model behind `runtime-name`, `artifact-name`, `install-name`, and
 
 `condarc-file`
 : Optional path to a YAML condarc file. Relative paths are resolved from
-  the selected project manifest. The builder requires a YAML mapping and stamps
+  the selected project manifest directory. The resolved file must remain inside
+  that directory, including when an absolute path or symbolic link is used.
+  The builder requires a YAML mapping and stamps
   the file's exact text content into the runtime. During bootstrap, the runtime
   writes that content to `<prefix>/.condarc`.
 
@@ -237,8 +239,8 @@ The table is supported for `online` and `embedded` artifact layouts. The
 
 `channel`
 : Absolute conda channel URL used to resolve native runtime update packages.
-  The URL must use `https://` or `file://`. It must not contain credentials, a
-  query, or a fragment.
+  The URL must use `https://` or `file://`. It must not contain credentials,
+  including Anaconda `/t/<token>` path segments, a query, or a fragment.
 
 `package`
 : Conda package name used for runtime update records. The package must contain

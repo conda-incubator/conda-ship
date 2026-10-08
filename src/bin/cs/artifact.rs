@@ -244,9 +244,6 @@ pub(crate) fn dry_run_build_artifact(
 
     let runtime_lock_path = generated_runtime_lock_path(&root);
     let packages = packages_for_platform(&derived.lock_file, &runtime_lock_path, platform)?;
-    if layout.needs_bundle() {
-        validate_bundle_package_hashes(&packages)?;
-    }
 
     let template_source = source_binary_plan(template.as_deref(), target.as_deref())?;
     let out_dir = resolve_out_dir(&root, &out_dir);
@@ -763,32 +760,6 @@ fn print_project_summary(
         "  source lockfile: {}",
         display_path(root, &derived.input.lock_path)
     )
-}
-
-pub(crate) fn validate_bundle_package_hashes(packages: &[&CondaPackageData]) -> miette::Result<()> {
-    let mut missing = Vec::new();
-    for pkg in packages {
-        let record = package_record(pkg)?;
-        if record.sha256.is_none() {
-            missing.push(record.name.as_normalized().to_string());
-        }
-    }
-    missing.sort();
-    missing.dedup();
-    if !missing.is_empty() {
-        return Err(ship_error(
-            DiagnosticKind::MissingSha256,
-            format!(
-                "cannot bundle packages without SHA256 hashes in the source lockfile: {}",
-                missing.join(", ")
-            ),
-            Some(
-                "Refresh the source lockfile with package hash metadata before building an external or embedded layout."
-                    .to_string(),
-            ),
-        ));
-    }
-    Ok(())
 }
 
 fn display_path(root: &Path, path: &Path) -> String {
@@ -1438,16 +1409,7 @@ pub(crate) fn validate_update_config(
             "runtime update channel must use https:// or file://"
         ));
     }
-    if !channel.username().is_empty() || channel.password().is_some() {
-        return Err(miette::miette!(
-            "runtime update channel must not contain credentials"
-        ));
-    }
-    if channel.query().is_some() || channel.fragment().is_some() {
-        return Err(miette::miette!(
-            "runtime update channel must not contain a query or fragment"
-        ));
-    }
+    super::http::validate_artifact_url(&update.channel, "runtime update channel")?;
     if update
         .package
         .parse::<rattler_conda_types::PackageName>()

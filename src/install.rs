@@ -57,6 +57,15 @@ pub(crate) fn lockfile_records_for_current_platform(
         .context("failed to extract records from lockfile")?
         .ok_or_else(|| miette::miette!("lockfile has no records for platform {}", platform))?;
 
+    for record in &records {
+        if record.package_record.sha256.is_none() {
+            return Err(miette::miette!(
+                "{} has no SHA256 in the lockfile, refusing installation",
+                record.package_record.name.as_normalized()
+            ));
+        }
+    }
+
     Ok((platform, records))
 }
 
@@ -172,16 +181,20 @@ pub(crate) async fn from_lockfile_with_bundle_and_specs(
     let package_cache = PackageCache::new(cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR));
 
     let start = Instant::now();
-    let cache_futures = matched.iter().map(|path| {
+    let cache_futures = matched.iter().map(|package| {
         let cache = &package_cache;
         async move {
             cache
-                .get_or_fetch_from_path(path, None, None)
+                .get_or_fetch_from_path(
+                    package.snapshot.path(),
+                    Some(&package.record.package_record),
+                    None,
+                )
                 .await
                 .into_diagnostic()
                 .context(format!(
                     "failed to cache package from bundle: {}",
-                    policy::path_for_display(path)
+                    package.record.identifier
                 ))
         }
     });
@@ -191,6 +204,7 @@ pub(crate) async fn from_lockfile_with_bundle_and_specs(
         matched.len(),
         start.elapsed().as_secs_f64()
     );
+    drop(matched);
 
     let match_specs = parse_specs(requested_specs)?;
     let installed = PrefixRecord::collect_from_prefix::<PrefixRecord>(prefix).into_diagnostic()?;
@@ -449,14 +463,20 @@ fn validate_bundle_archive_name(name: &str) -> miette::Result<()> {
     Ok(())
 }
 
-/// Match lockfile records to files in a bundle index.
+#[derive(Debug)]
+pub(crate) struct BundlePackage<'a> {
+    snapshot: tempfile::NamedTempFile,
+    record: &'a RepoDataRecord,
+}
+
+/// Match lockfile records to verified private copies of bundle archives.
 ///
-/// Returns `(matched_paths, missing_names)` where `missing_names` lists
+/// Returns `(matched_packages, missing_names)` where `missing_names` lists
 /// packages not found in the bundle.
-pub(crate) fn match_records_to_bundle(
-    records: &[RepoDataRecord],
+pub(crate) fn match_records_to_bundle<'a>(
+    records: &'a [RepoDataRecord],
     bundle_index: &HashMap<String, PathBuf>,
-) -> miette::Result<(Vec<PathBuf>, Vec<String>)> {
+) -> miette::Result<(Vec<BundlePackage<'a>>, Vec<String>)> {
     let mut matched = Vec::new();
     let mut missing = Vec::new();
 
@@ -469,8 +489,26 @@ pub(crate) fn match_records_to_bundle(
             .to_string();
 
         if let Some(path) = bundle_index.get(&filename) {
-            verify_bundle_package(record, path, &filename)?;
-            matched.push(path.clone());
+            let suffix = if filename.ends_with(".conda") {
+                ".conda"
+            } else {
+                ".tar.bz2"
+            };
+            let mut snapshot = tempfile::Builder::new()
+                .prefix("conda-ship-package-")
+                .suffix(suffix)
+                .tempfile()
+                .into_diagnostic()
+                .context("failed to create private bundle package copy")?;
+            let mut source = std::fs::File::open(path)
+                .into_diagnostic()
+                .context("failed to open bundled package archive")?;
+            std::io::copy(&mut source, snapshot.as_file_mut())
+                .into_diagnostic()
+                .context("failed to copy bundled package archive")?;
+            // Cache extraction reopens its input, so verify the private copy it will read.
+            verify_bundle_package(record, snapshot.path(), &filename)?;
+            matched.push(BundlePackage { snapshot, record });
         } else {
             missing.push(filename);
         }
@@ -484,7 +522,7 @@ fn verify_bundle_package(
     filename: &str,
 ) -> miette::Result<()> {
     let expected = record.package_record.sha256.as_ref().ok_or_else(|| {
-        miette::miette!("{filename} has no SHA256 in the lockfile; refusing bundle install")
+        miette::miette!("{filename} has no SHA256 in the lockfile, refusing bundle install")
     })?;
     let (actual, _) = crate::hash::sha256_file(path)
         .into_diagnostic()
@@ -875,10 +913,11 @@ mod tests {
         assert_eq!(missing.len(), expected_missing, "missing count");
     }
 
-    #[test]
-    fn test_match_records_to_bundle_rejects_checksum_mismatch() {
+    #[rstest]
+    #[case::conda("a-1-h1.conda")]
+    #[case::tar_bz2("a-1-h1.tar.bz2")]
+    fn test_match_records_to_bundle_rejects_checksum_mismatch(#[case] filename: &str) {
         let tmp = tempfile::TempDir::new().unwrap();
-        let filename = "a-1-h1.conda";
         let path = tmp.path().join(filename);
         std::fs::write(&path, b"tampered").unwrap();
         let mut bundle_index = HashMap::new();
@@ -890,6 +929,157 @@ mod tests {
             err.to_string().contains("SHA256 mismatch"),
             "unexpected error: {err:?}"
         );
+    }
+
+    fn write_bundle_archive(root: &Path, filename: &str, payload: &[u8]) -> PathBuf {
+        use rattler_conda_types::compression_level::CompressionLevel;
+
+        let contents = root.join("contents");
+        std::fs::create_dir_all(contents.join("info")).unwrap();
+        std::fs::write(
+            contents.join("info/index.json"),
+            r#"{"name":"dummy","version":"1.0","build":"0","build_number":0,"depends":[]}"#,
+        )
+        .unwrap();
+        let (digest, _) = crate::hash::sha256_reader(payload).unwrap();
+        std::fs::write(
+            contents.join("info/paths.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "paths_version": 1,
+                "paths": [{
+                    "_path": "payload.txt",
+                    "path_type": "hardlink",
+                    "sha256": crate::hash::hex(&digest),
+                    "size_in_bytes": payload.len()
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        std::fs::write(contents.join("payload.txt"), payload).unwrap();
+        let paths = [
+            contents.join("info/index.json"),
+            contents.join("info/paths.json"),
+            contents.join("payload.txt"),
+        ];
+        let archive = root.join(filename);
+        let output = std::fs::File::create(&archive).unwrap();
+        if filename.ends_with(".conda") {
+            rattler_package_streaming::write::write_conda_package(
+                output,
+                &contents,
+                &paths,
+                CompressionLevel::Default,
+                Some(1),
+                "dummy-1.0-0",
+                None,
+                None,
+            )
+            .unwrap();
+        } else {
+            rattler_package_streaming::write::write_tar_bz2_package(
+                output,
+                &contents,
+                &paths,
+                CompressionLevel::Default,
+                None,
+                None,
+            )
+            .unwrap();
+        }
+        archive
+    }
+
+    #[rstest]
+    #[case::conda("dummy-1.0-0.conda")]
+    #[case::tar_bz2("dummy-1.0-0.tar.bz2")]
+    #[tokio::test]
+    async fn test_bundle_cache_uses_verified_copy_after_source_replacement(#[case] filename: &str) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let bundle = tmp.path().join("bundle");
+        let archive = write_bundle_archive(&bundle, filename, b"original package");
+        let records = vec![make_record_with_url(
+            filename,
+            &std::fs::read(&archive).unwrap(),
+        )];
+        let index = index_bundle_dir(&bundle).unwrap();
+        let (matched, missing) = match_records_to_bundle(&records, &index).unwrap();
+        assert!(missing.is_empty());
+
+        let replacement = write_bundle_archive(
+            &tmp.path().join("replacement"),
+            filename,
+            b"replacement package",
+        );
+        std::fs::copy(&replacement, &archive).unwrap();
+        let package = &matched[0];
+        let cache = PackageCache::new(tmp.path().join("cache"));
+        let cached = cache
+            .get_or_fetch_from_path(
+                package.snapshot.path(),
+                Some(&package.record.package_record),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read(cached.path().join("payload.txt")).unwrap(),
+            b"original package"
+        );
+        assert_eq!(
+            std::fs::read(&archive).unwrap(),
+            std::fs::read(&replacement).unwrap()
+        );
+        let error = match_records_to_bundle(&records, &index).unwrap_err();
+        assert!(error.to_string().contains("SHA256 mismatch"));
+    }
+
+    #[rstest]
+    #[case::sha256("sha256", 64, true)]
+    #[case::md5_only("md5", 32, false)]
+    #[case::hashless("", 0, false)]
+    fn test_runtime_lock_requires_sha256(
+        #[case] hash_name: &str,
+        #[case] hash_length: usize,
+        #[case] accepted: bool,
+        #[values("http", "https", "file")] scheme: &str,
+    ) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let base_url = if scheme == "file" {
+            reqwest::Url::from_directory_path(tmp.path())
+                .unwrap()
+                .to_string()
+                .trim_end_matches('/')
+                .to_string()
+        } else {
+            format!("{scheme}://example.invalid")
+        };
+        let platform = Platform::current();
+        let location = format!("{base_url}/{platform}/demo-1.0-0.conda");
+        let hash_line = if hash_name.is_empty() {
+            String::new()
+        } else {
+            format!("    {hash_name}: {}\n", "a".repeat(hash_length))
+        };
+        let lock = format!(
+            "version: 6\nenvironments:\n  default:\n    channels: []\n    packages:\n      {platform}:\n        - conda: {location}\npackages:\n  - conda: {location}\n    subdir: {platform}\n{hash_line}"
+        );
+
+        let result = lockfile_records_for_current_platform(&lock);
+        if accepted {
+            let (selected_platform, records) = result.unwrap();
+            assert_eq!(selected_platform, platform);
+            assert_eq!(records.len(), 1);
+            assert!(records[0].package_record.sha256.is_some());
+        } else {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("demo has no SHA256 in the lockfile")
+            );
+        }
     }
 
     fn bundle_lockfile(package_bytes: &[u8]) -> String {

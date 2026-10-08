@@ -62,6 +62,7 @@ class ShipCommand:
         return not (
             self.has_option("-h")
             or self.has_option("--help")
+            or self.has_option("--dry-run")
             or self.has_option("--runtime-version")
         )
 
@@ -107,10 +108,16 @@ class CondaShipProject:
         cwd = Path.cwd() if cwd is None else cwd
         manifest_path = command.path_option("--manifest", cwd) if command.name == "build" else None
         if manifest_path is not None:
+            if manifest_path.name not in {"conda.toml", "pixi.toml", "pyproject.toml"}:
+                return None
             try:
                 manifest_data = read_toml(manifest_path)
             except (OSError, tomllib.TOMLDecodeError) as error:
                 raise ProjectMetadataError(f"failed to read explicit manifest: {error}") from error
+            if manifest_path.name == "pyproject.toml" and not cls.supports_pyproject(
+                manifest_data
+            ):
+                return None
             return cls(
                 root=manifest_path.parent,
                 manifest_path=manifest_path,

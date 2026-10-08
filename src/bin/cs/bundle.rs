@@ -1,14 +1,13 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use miette::{Context, IntoDiagnostic};
 use rattler_conda_types::Platform;
 use rattler_lock::{CondaPackageData, LockFile, UrlOrPath};
 use sha2::Digest;
 
-use super::artifact::{validate_bundle_package_hashes, validate_package_archive_name};
-use super::tls;
+use super::artifact::validate_package_archive_name;
+use super::project::validate_package_hashes;
 
 pub(crate) fn gen_bundle_from_lock(
     lock_file: &LockFile,
@@ -32,7 +31,7 @@ pub(crate) fn gen_bundle_from_lock(
             runtime_lock_path.display()
         ));
     }
-    validate_bundle_package_hashes(&packages)?;
+    validate_package_hashes(packages.iter().copied())?;
 
     eprintln!("downloading {} packages for {platform}...", packages.len());
 
@@ -53,13 +52,7 @@ async fn download_and_bundle(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use futures::stream::{self, StreamExt};
 
-    tls::install_default_provider();
-    let client = reqwest::Client::builder()
-        .user_agent(crate::http::USER_AGENT)
-        .no_gzip()
-        .connect_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(600))
-        .build()?;
+    let client = crate::http::download_client().map_err(|error| error.to_string())?;
 
     let bundle_parent = bundle_path
         .parent()
@@ -215,6 +208,7 @@ mod tests {
     use super::*;
     use std::io::{BufRead, BufReader, Read};
     use std::net::TcpListener;
+    use std::time::Duration;
 
     use rstest::rstest;
     use tempfile::TempDir;
@@ -222,7 +216,7 @@ mod tests {
     const PACKAGE_NAME: &str = "demo-1.0-0.conda";
     const PACKAGE_BYTES: &[u8] = b"locked package contents";
 
-    fn serve_package(status: &'static str) -> (String, std::thread::JoinHandle<()>) {
+    fn serve_package(status: &'static str) -> (String, std::thread::JoinHandle<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -249,12 +243,14 @@ mod tests {
             let mut line = String::new();
             reader.read_line(&mut line).unwrap();
             assert!(line.starts_with(&format!("GET /linux-64/{PACKAGE_NAME} ")));
+            let mut headers = String::new();
             loop {
                 line.clear();
                 assert_ne!(reader.read_line(&mut line).unwrap(), 0);
                 if line == "\r\n" {
                     break;
                 }
+                headers.push_str(&line);
             }
             write!(
                 stream,
@@ -263,6 +259,7 @@ mod tests {
             )
             .unwrap();
             stream.write_all(PACKAGE_BYTES).unwrap();
+            headers
         });
         (format!("http://{address}/linux-64/{PACKAGE_NAME}"), server)
     }
@@ -292,6 +289,39 @@ mod tests {
         entry.read_to_end(&mut contents).unwrap();
         assert_eq!(contents, PACKAGE_BYTES);
         assert!(entries.next().is_none());
+    }
+
+    #[rstest]
+    #[case::plain(false)]
+    #[case::authenticated(true)]
+    fn test_bundle_download_uses_runtime_authentication(#[case] authenticated: bool) {
+        let tmp = TempDir::new().unwrap();
+        let auth = tmp.path().join("auth.json");
+        std::fs::write(&auth, r#"{"127.0.0.1":{"BearerToken":"private-token"}}"#).unwrap();
+        let (url, server) = serve_package("200 OK");
+        let lock = package_lock(&url, PACKAGE_BYTES);
+        let bundle = tmp.path().join("bundle.tar.zst");
+
+        temp_env::with_var(
+            "RATTLER_AUTH_FILE",
+            authenticated.then_some(auth.as_os_str()),
+            || {
+                gen_bundle_from_lock(
+                    &lock,
+                    &tmp.path().join("runtime.lock"),
+                    Platform::Linux64,
+                    &bundle,
+                )
+                .unwrap();
+            },
+        );
+
+        let headers = server.join().unwrap().to_ascii_lowercase();
+        assert_eq!(
+            headers.contains("authorization: bearer private-token\r\n"),
+            authenticated
+        );
+        assert_bundle_contents(&bundle, PACKAGE_NAME);
     }
 
     #[rstest]

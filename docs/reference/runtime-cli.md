@@ -131,7 +131,8 @@ platform, version, build number, and update source. A candidate cannot rotate
 its update channel or package.
 
 Update channels must use `https://` or `file://`. Stamped URLs cannot contain
-credentials, a query, or a fragment. HTTPS requests can read credentials from
+credentials, Anaconda `/t/<token>` path segments, a query, or a fragment.
+HTTPS requests can read credentials from
 the explicit JSON file selected with `RATTLER_AUTH_FILE`. The runtime does not
 enable keyring, netrc, or default auth-file discovery. It does not provide an
 interactive login or a provider-specific API.

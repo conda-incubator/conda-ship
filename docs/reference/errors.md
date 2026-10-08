@@ -42,15 +42,24 @@ conda without depending on terminal formatting.
 `failed to parse condarc-file as YAML`
 : Fix the referenced YAML file.
 
+`condarc-file must resolve inside the selected manifest directory`
+: Place the runtime condarc next to the manifest or in a subdirectory. Absolute
+  paths and symbolic links must also resolve to a file inside that directory.
+
 `condarc-file must contain a YAML mapping`
 : Use normal condarc key and value entries rather than a top-level scalar or
   sequence.
 
 ## Package archives
 
-`cannot bundle packages without SHA256 hashes`
-: Refresh the source lockfile with package hash metadata before building
-  `external` or `embedded` layouts.
+`cannot ship packages without SHA256 hashes`
+: Refresh the source lockfile with SHA256 package hashes. All artifact layouts
+  require them, including `online`. MD5 alone is insufficient.
+
+`source lockfile package URL must not contain credentials`
+: Remove credentials from shipped package URLs and use `RATTLER_AUTH_FILE`
+  for authentication. The same check applies to selected channel URLs and
+  rejects Anaconda token paths, queries, and fragments before writing artifacts.
 
 `no default environment in ... runtime.lock`
 : The derived runtime lock is malformed. Rebuild from the source lockfile.

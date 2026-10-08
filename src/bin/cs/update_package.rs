@@ -394,17 +394,7 @@ fn validate_channel(value: &str) -> miette::Result<()> {
             "runtime update channel must use https:// or file://"
         ));
     }
-    if !channel.username().is_empty() || channel.password().is_some() {
-        return Err(miette::miette!(
-            "runtime update channel must not contain credentials"
-        ));
-    }
-    if channel.query().is_some() || channel.fragment().is_some() {
-        return Err(miette::miette!(
-            "runtime update channel must not contain a query or fragment"
-        ));
-    }
-    Ok(())
+    super::http::validate_artifact_url(value, "runtime update channel")
 }
 
 fn validate_plain_filename(value: &str, field: &str) -> miette::Result<()> {

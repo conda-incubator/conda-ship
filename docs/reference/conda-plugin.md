@@ -60,11 +60,18 @@ the version before invoking `cs build` or `cs run`. It calls the project's PEP
 517 `prepare_metadata_for_build_wheel` hook, reads `Version` from the generated
 wheel metadata, and forwards the concrete value as `--runtime-version`.
 
+The adapter skips the metadata hook for `--dry-run`, help, and an explicit
+`--runtime-version`. When the runtime version comes from project metadata,
+pass `--runtime-version VERSION` for a dry-run preview.
+
 For `conda ship build --manifest PATH`, the adapter reads the selected manifest
 even when a higher-priority manifest exists beside it. Python project metadata
 comes from `pyproject.toml` in the selected manifest's directory, including when
 `--root` points elsewhere. Relative manifest paths resolve from the current
-directory.
+directory. Supported manifest names are `conda.toml`, `pixi.toml`, and
+`pyproject.toml` with a nonempty `[tool.conda.workspace]` or
+`[tool.pixi.workspace]` table. Unsupported selections pass through to `cs`
+without running the metadata hook.
 
 The build backend must already be installed in the Python environment running
 `conda ship`. The adapter does not build a wheel if the metadata hook is

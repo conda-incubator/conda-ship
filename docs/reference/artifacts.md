@@ -69,6 +69,10 @@ runtime lock. They are not channel mirrors and do not use a `linux-64/` or
 `external` and `embedded` bundles contain top-level `.conda` and `.tar.bz2`
 package archive files. The runtime matches those filenames against the stamped
 lockfile and verifies package SHA256 values before installing from them.
+Local archives are copied into private temporary files before verification.
+Cache imports read those verified copies, so replacing a source archive during
+bootstrap cannot change the imported bytes. Bootstrap needs temporary space for
+the copies until cache import finishes.
 
 External bundle directories may contain unrelated files, but conda-ship only
 indexes top-level conda package archives and skips symbolic links. Embedded
@@ -266,4 +270,4 @@ The package list is tab-separated and contains:
 - version
 - build string
 - package URL
-- SHA256, when available from the lockfile
+- SHA256, required for every shipped package
