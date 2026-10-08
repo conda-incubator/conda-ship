@@ -2,6 +2,48 @@
 
 All notable changes to `conda-ship` are documented here.
 
+## 0.11.0 - 2026-10-08
+
+### Added
+
+- Added `cs build --manifest`, `--source-lock`, and `--source-environment` to
+  select an existing manifest, lockfile, and solved environment without
+  modifying them. Automatic discovery remains available when the options are
+  omitted. Local package paths remain relative to the selected source lockfile.
+- Allowed conda-workspaces lockfiles alongside Pixi-compatible manifests and
+  resolved Python project metadata from the selected manifest's directory.
+
+### Fixed
+
+- Rejected build output paths that would overwrite the source manifest or
+  lockfile, including symlink and hard-link aliases.
+- Required SHA256 hashes for every shipped package and runtime installation,
+  including online layouts. MD5 alone is no longer accepted.
+- Rejected credentials, Anaconda token paths, queries, and fragments in shipped
+  package and channel URLs.
+- Extended update-channel validation to reject Anaconda token paths, including
+  encoded forms and segments removed during URL normalization.
+- Used the shared authenticated client for bundle downloads and rejected HTTPS
+  redirects to insecure schemes.
+- Imported bundled packages from the same private copies that passed checksum
+  verification, preventing source replacement from changing imported bytes.
+- Confined `condarc-file` reads to the selected manifest directory, including
+  when files or directories are replaced during a build.
+- Skipped Python build-backend metadata hooks during dry runs and for
+  unsupported explicit manifest selections.
+
+### Migration
+
+- Refresh source lockfiles that lack SHA256 package hashes. Move download
+  credentials out of shipped URLs and supply them through `RATTLER_AUTH_FILE`.
+- Keep `condarc-file` inside the selected manifest directory or a subdirectory.
+  Absolute paths and symbolic links must also resolve inside that directory.
+- Pass `--runtime-version VERSION` for dry runs when the version normally comes
+  from Python project metadata.
+- Rebuild existing runtimes with the new `cs` and `cs-template` binaries to
+  receive the installation and download fixes. Bundle bootstrap needs temporary
+  space for verified package copies until cache import finishes.
+
 ## 0.10.0 - 2026-10-02
 
 ### Added

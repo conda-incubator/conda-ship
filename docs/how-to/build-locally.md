@@ -121,7 +121,7 @@ have a different filename or live in another directory, and the environment
 flag overrides `[tool.conda-ship].source-environment` for this build. These
 options leave the source files unchanged.
 
-The recording uses an unreleased source build and the repository's committed
+The recording uses a source build and the repository's committed
 lockfile. It selects `pixi.toml` even though `conda.toml` exists beside it.
 
 ```{figure} ../../demos/input-selection.gif
