@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import sysconfig
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -151,9 +152,8 @@ def resolve_cs(*, executable: str | None = None) -> ResolvedExecutable:
     if installed is not None:
         return validate_executable(Path(installed), "current Python environment")
 
-    expected = Path(sys.executable).with_name(cs_binary_name())
     raise AdapterError(
-        f"could not find `cs` next to the current Python executable at {expected}. "
+        "could not find `cs` in the current Python environment. "
         "Install conda-ship in this environment or set CONDA_SHIP_EXECUTABLE "
         "for a source checkout or custom package.",
         EXIT_NOT_FOUND,
@@ -192,6 +192,9 @@ def cs_binary_name() -> str:
 
 def installed_cs() -> str | None:
     """Find the ``cs`` executable installed with the current Python env."""
+    scripts_binary = Path(sysconfig.get_path("scripts")) / cs_binary_name()
+    if scripts_binary.is_file():
+        return str(scripts_binary)
     env_binary = Path(sys.executable).with_name(cs_binary_name())
     if env_binary.is_file():
         return str(env_binary)
