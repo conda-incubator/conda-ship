@@ -572,7 +572,7 @@ dependencies = [
  "rattler_cache",
  "rattler_conda_types",
  "rattler_lock",
- "rattler_networking",
+ "rattler_networking 0.31.0",
  "rattler_package_streaming",
  "reqwest",
  "rstest",
@@ -2515,7 +2515,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "rattler_menuinst",
- "rattler_networking",
+ "rattler_networking 0.30.5",
  "rattler_package_streaming",
  "rattler_shell",
  "rayon",
@@ -2554,7 +2554,7 @@ dependencies = [
  "parking_lot",
  "rattler_conda_types",
  "rattler_digest",
- "rattler_networking",
+ "rattler_networking 0.30.5",
  "rattler_package_streaming",
  "rattler_redaction",
  "rayon",
@@ -2730,6 +2730,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_networking"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9032229711eae397410b2f294907a7c7f0ba917660fbb9457ddd75464137c25f"
+dependencies = [
+ "ambient-id",
+ "astral-reqwest-middleware",
+ "async-once-cell",
+ "async-trait",
+ "base64 0.22.1",
+ "fs-err",
+ "futures",
+ "getrandom 0.4.3",
+ "http",
+ "http-auth",
+ "itertools 0.15.0",
+ "reqwest",
+ "retry-policies",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "rattler_package_streaming"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2755,7 +2782,7 @@ dependencies = [
  "num_cpus",
  "rattler_conda_types",
  "rattler_digest",
- "rattler_networking",
+ "rattler_networking 0.30.5",
  "rattler_redaction",
  "reqwest",
  "serde_json",
