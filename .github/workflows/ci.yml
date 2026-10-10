@@ -304,6 +304,11 @@ jobs:
       - name: Test Python package
         run: pixi run --locked -e test pytest
 
+      - name: Validate installed builder and template pair
+        run: >-
+          pixi run --locked -e test python tests/ci/validate_runtime_pair.py installed
+          --scratch-root .
+
       - name: Check Python package
         run: |
           pixi run --locked -e test ruff-check

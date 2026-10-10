@@ -14,6 +14,9 @@ sccache = ">=0.10"
 
 [target.linux.activation.env]
 RUSTC_WRAPPER = "sccache"
+# Conda GCC's default specs add an environment RPATH to copied runtimes.
+# Use its GNU linker to retain the configured sysroot with builtin specs.
+RUSTFLAGS = "-C link-arg=-specs=builtin.specs -C link-arg=-fuse-ld=bfd"
 
 [target.osx.dependencies]
 cargo-llvm-cov = ">=0.6"

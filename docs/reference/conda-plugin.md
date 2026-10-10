@@ -37,6 +37,23 @@ For custom packaging or tests, set `CONDA_SHIP_EXECUTABLE` to an explicit
 executable path. An invalid value causes an error, even when a packaged `cs`
 is available.
 
+### Checking an installed package
+
+Package recipes can reuse the upstream runtime validator. Copy
+`tests/ci/validate_runtime_pair.py` and `tests/fixtures/structural-runtime/`
+from the source archive into the package test directory, then run with the
+installed package's Python:
+
+```bash
+python tests/ci/validate_runtime_pair.py installed --scratch-root .
+```
+
+The validator checks automatic template discovery, builds a runtime, verifies
+its checksums and metadata, and runs the template and generated runtime outside
+the installation directory. It stops before installing packages or downloading
+them. Keep import checks and `conda ship -- --help` in the recipe to check the
+Python package and conda plugin registration too.
+
 ## Argument forwarding
 
 Arguments after `conda ship` are passed to `cs`:
