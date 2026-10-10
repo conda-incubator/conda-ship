@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import sysconfig
 import textwrap
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,7 @@ from conda_ship.project_metadata import ProjectMetadataError
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
 
 class FakeProcess:
@@ -25,6 +27,15 @@ class FakeProcess:
 
     def wait(self) -> int:
         return self.returncode
+
+
+@pytest.fixture
+def scripts_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    directory = tmp_path / "Scripts"
+    directory.mkdir()
+    monkeypatch.setattr(sysconfig, "get_path", lambda name: str(directory))
+    monkeypatch.delenv("CONDA_SHIP_EXECUTABLE", raising=False)
+    return directory
 
 
 def test_configure_parser_collects_ship_args() -> None:
@@ -76,6 +87,7 @@ def test_run_cs_delegates_to_executable(
 
 def test_run_cs_reports_missing_executable(
     tmp_path,
+    scripts_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -84,6 +96,12 @@ def test_run_cs_reports_missing_executable(
     python = bin_dir / "python"
     python.write_text("")
     monkeypatch.setattr(cli.sys, "executable", str(python))
+    foreign_bin = tmp_path / "other-env"
+    foreign_bin.mkdir()
+    decoy = foreign_bin / cli.cs_binary_name()
+    decoy.write_text("")
+    decoy.chmod(0o755)
+    monkeypatch.setenv("PATH", str(foreign_bin))
 
     status = run_cs([])
 
@@ -91,17 +109,26 @@ def test_run_cs_reports_missing_executable(
     assert "could not find" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("location", ["scripts", "sibling", "both"])
 def test_run_cs_prefers_current_environment_binary(
+    location: str,
     tmp_path,
+    scripts_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     python = bin_dir / "python"
-    cs = bin_dir / ("cs.exe" if cli.os.name == "nt" else "cs")
+    sibling = bin_dir / cli.cs_binary_name()
+    script = scripts_dir / cli.cs_binary_name()
     python.write_text("")
-    cs.write_text("")
-    cs.chmod(0o755)
+    if location in {"sibling", "both"}:
+        sibling.write_text("")
+        sibling.chmod(0o755)
+    if location in {"scripts", "both"}:
+        script.write_text("")
+        script.chmod(0o755)
+    cs = sibling if location == "sibling" else script
     calls: list[list[str]] = []
 
     def fake_popen(args: list[str], **_kwargs) -> FakeProcess:
@@ -408,10 +435,21 @@ def test_run_cs_normalizes_real_signal_exit() -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX executable permissions")
-def test_run_cs_rejects_nonexecutable_file(tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
-    cs = tmp_path / "cs"
+@pytest.mark.parametrize("explicit", [True, False], ids=["explicit", "installed"])
+def test_run_cs_rejects_nonexecutable_file(
+    explicit: bool,
+    tmp_path: Path,
+    scripts_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cs = scripts_dir / "cs"
     cs.write_text("", encoding="utf-8")
     cs.chmod(0o644)
+    sibling = tmp_path / "cs"
+    sibling.write_text("")
+    sibling.chmod(0o755)
+    monkeypatch.setattr(cli.sys, "executable", str(tmp_path / "python"))
 
-    assert run_cs([], executable=str(cs)) == 126
+    assert run_cs([], executable=str(cs) if explicit else None) == 126
     assert "file that is not executable" in capsys.readouterr().err

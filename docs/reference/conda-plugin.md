@@ -20,10 +20,12 @@ automatically. Source checkouts need an installed template, a
 ## Packaging details
 
 The PyPI package installs the Python adapter and the Rust-built `cs` executable
-together. `conda-ship` looks for `cs` next to the current Python interpreter.
+together. The adapter first looks for `cs` in the current Python environment's
+scripts directory, usually `bin` on Unix and `Scripts` on Windows. It also
+accepts `cs` next to the Python interpreter for compatibility with older layouts.
 It does not search `PATH`, so `conda ship` cannot accidentally run an unrelated
-`cs` executable from another environment. A future conda package should use the
-same layout.
+`cs` executable from another environment. Conda packages should install `cs`
+and `cs-template` together in the scripts directory.
 
 Packages must install these pieces into the same environment:
 

@@ -95,8 +95,9 @@ that table is not a supported source manifest.
 `conda ship` when installed in a conda environment. It runs the same `cs`
 builder and forwards the arguments.
 
-By default, the adapter uses the `cs` executable next to the current Python
-interpreter. It does not search `PATH`. Set `CONDA_SHIP_EXECUTABLE` to select
+By default, the adapter looks for `cs` in the current Python environment's
+scripts directory, then next to the Python interpreter. It does not search
+`PATH`. Set `CONDA_SHIP_EXECUTABLE` to select
 a different executable for tests or custom packaging. An invalid override
 causes an error. See {doc}`../reference/conda-plugin` for packaging requirements
 and project metadata version support.
