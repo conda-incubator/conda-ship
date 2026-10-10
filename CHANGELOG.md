@@ -2,6 +2,19 @@
 
 All notable changes to `conda-ship` are documented here.
 
+## 0.11.1 - 2026-10-09
+
+### Fixed
+
+- Find the installed `cs` executable in Python's scripts directory, including
+  `Scripts` on Windows, while retaining the interpreter-sibling fallback.
+
+### Changed
+
+- Share installed builder and template checks with downstream package recipes.
+  The upstream Python CI jobs now check template discovery, runtime stamping,
+  checksums, and execution outside the installation directory.
+
 ## 0.11.0 - 2026-10-08
 
 ### Added
