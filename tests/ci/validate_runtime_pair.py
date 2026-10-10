@@ -1,9 +1,10 @@
-"""Validate native and wheel-packaged conda-ship builder/template pairs."""
+"""Validate native, wheel-packaged, and installed conda-ship builder/template pairs."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
 import shutil
 import stat
@@ -219,11 +220,110 @@ def validate_wheel(args: argparse.Namespace) -> None:
         )
 
 
+def run_installed_command(
+    *args: str | Path,
+    success: bool = True,
+    env: dict[str, str] | None = None,
+) -> str:
+    """Run an installed-package check with bounded execution time."""
+    result = subprocess.run(
+        [str(arg) for arg in args],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env,
+    )
+    if (result.returncode == 0) != success:
+        raise ValidationError(
+            f"{Path(args[0]).name} exited with status {result.returncode}:\n"
+            f"{result.stdout}{result.stderr}"
+        )
+    return result.stdout + result.stderr
+
+
+def validate_installed(args: argparse.Namespace) -> None:
+    """Check installed-pair discovery and runtimes copied outside the package prefix."""
+    from conda_ship.cli import resolve_cs
+
+    for name in list(os.environ):
+        if name.startswith(("CONDA_SHIP_", "CS_TEMPLATE_")) or name in {
+            "LD_LIBRARY_PATH",
+            "DYLD_LIBRARY_PATH",
+            "DYLD_FALLBACK_LIBRARY_PATH",
+        }:
+            os.environ.pop(name)
+
+    builder = resolve_cs().path
+    extension = ".exe" if os.name == "nt" else ""
+    template = require_file(builder.with_name(f"cs-template{extension}"), "runtime template")
+    fixture_root = require_directory(args.fixture_root, "runtime fixture")
+    scratch_root = require_directory(args.scratch_root, "scratch root")
+    runtime_env = os.environ.copy()
+    if os.name == "nt":
+        system_root = Path(os.environ["SystemRoot"])
+        runtime_env["PATH"] = os.pathsep.join((str(system_root), str(system_root / "System32")))
+
+    with tempfile.TemporaryDirectory(prefix="installed-pair-", dir=scratch_root) as temporary:
+        temporary_root = Path(temporary)
+        fixture = copy_fixture(fixture_root, temporary_root)
+        copied_template = temporary_root / template.name
+        shutil.copy2(template, copied_template)
+        if sys.platform == "darwin" and shutil.which("otool"):
+            linkage = run_installed_command("otool", "-L", copied_template)
+            libraries = [line.split()[0] for line in linkage.splitlines()[1:]]
+            if not all(name.startswith(("/usr/lib/", "/System/Library/")) for name in libraries):
+                raise ValidationError(
+                    f"runtime template links a non-system shared library:\n{linkage}"
+                )
+        elif sys.platform.startswith("linux") and shutil.which("ldd"):
+            linkage = run_installed_command("ldd", copied_template)
+            if "not found" in linkage:
+                raise ValidationError(
+                    f"runtime template has an unresolved shared library:\n{linkage}"
+                )
+            libraries = re.findall(r"(/[\S]+)", linkage)
+            system_paths = ("/lib/", "/lib64/", "/usr/lib/", "/usr/lib64/")
+            if not all(name.startswith(system_paths) for name in libraries):
+                raise ValidationError(
+                    f"runtime template links a non-system shared library:\n{linkage}"
+                )
+
+        output = run_installed_command(copied_template, success=False, env=runtime_env)
+        if "is a runtime template, not a runnable conda runtime" not in output:
+            raise ValidationError(
+                f"unstamped template did not report its expected error:\n{output}"
+            )
+
+        output_directory = temporary_root / "output"
+        run_installed_command(builder, "build", "--root", fixture, "--out-dir", output_directory)
+        manifests = list(output_directory.glob("*.sha256"))
+        if len(manifests) != 1:
+            raise ValidationError("expected one generated checksum manifest")
+        verify_checksum_manifest(manifests[0])
+        if len(list(output_directory.glob("*.info.json"))) != 1:
+            raise ValidationError("expected one generated runtime metadata file")
+        if len(list(output_directory.glob("*.cdx.json"))) != 1:
+            raise ValidationError("expected one generated runtime SBOM")
+
+        runtime = output_directory / f"structural-runtime{extension}"
+        invalid_prefix = temporary_root / "not-a-directory"
+        invalid_prefix.write_text("This prevents bootstrap before any package request.")
+        output = run_installed_command(
+            runtime,
+            "--help",
+            success=False,
+            env={**runtime_env, "CONDA_SHIP_PREFIX": str(invalid_prefix)},
+        )
+        if "refusing to use install path that is not a directory" not in output:
+            raise ValidationError(
+                f"stamped runtime did not reject the invalid install prefix:\n{output}"
+            )
+    print("Installed runtime template, stamping, checksums, and copied-runtime execution verified")
+
+
 def parser() -> argparse.ArgumentParser:
     """Construct the command-line parser."""
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--target", required=True, help="Rust target triple")
-    common.add_argument("--platform", required=True, help="Conda platform identifier")
     common.add_argument(
         "--scratch-root",
         required=True,
@@ -239,19 +339,26 @@ def parser() -> argparse.ArgumentParser:
 
     argument_parser = argparse.ArgumentParser(description=__doc__)
     subparsers = argument_parser.add_subparsers(dest="mode", required=True)
+    targeted = argparse.ArgumentParser(add_help=False, parents=[common])
+    targeted.add_argument("--target", required=True, help="Rust target triple")
+    targeted.add_argument("--platform", required=True, help="Conda platform identifier")
 
     native = subparsers.add_parser(
-        "native", parents=[common], help="validate Cargo-built binaries"
+        "native", parents=[targeted], help="validate Cargo-built binaries"
     )
     native.add_argument("--builder", type=Path, default=Path("target/release/cs"))
     native.add_argument("--template", type=Path, default=Path("target/release/cs-template"))
     native.set_defaults(execute=validate_native)
 
     wheel = subparsers.add_parser(
-        "wheel", parents=[common], help="validate binaries packaged in a wheel"
+        "wheel", parents=[targeted], help="validate binaries packaged in a wheel"
     )
     wheel.add_argument("--wheel-directory", type=Path, default=Path("dist-pypi"))
     wheel.set_defaults(execute=validate_wheel)
+    installed = subparsers.add_parser(
+        "installed", parents=[common], help="validate the installed builder and runtime template"
+    )
+    installed.set_defaults(execute=validate_installed)
     return argument_parser
 
 
@@ -262,6 +369,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.execute(args)
     except subprocess.CalledProcessError as error:
         print(f"runtime builder exited with status {error.returncode}", file=sys.stderr)
+        return 1
+    except subprocess.TimeoutExpired:
+        print("runtime-pair validation command timed out", file=sys.stderr)
         return 1
     except (OSError, ValidationError, zipfile.BadZipFile) as error:
         print(f"runtime-pair validation failed: {error}", file=sys.stderr)

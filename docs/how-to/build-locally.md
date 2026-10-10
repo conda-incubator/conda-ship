@@ -207,6 +207,7 @@ Before publishing a conda-ship release, run these local checks:
 pixi run test
 pixi run lint
 pixi run -e test pytest
+pixi run -e test python tests/ci/validate_runtime_pair.py installed --scratch-root .
 pixi run -e test ruff-check
 pixi run -e test ruff-format-check
 pixi run docs
@@ -218,6 +219,12 @@ zizmor --persona auditor .
 `pixi run lint` runs the repository's `prek` hooks for Rust formatting and
 clippy checks. Python checks remain explicit release-check commands in the test
 environment.
+
+Installing the `test` environment also builds `cs` and `cs-template` through
+Maturin in release mode, which can take several minutes. On Linux, the Pixi
+environment uses GCC's `builtin.specs` and GNU linker to keep the runtime's
+library search path independent of the build environment while preserving the
+compiler's sysroot.
 
 `cargo deny check` enforces the repository's Rust advisory, license, dependency
 ban, and source policies. Duplicate dependency versions are warnings for now
