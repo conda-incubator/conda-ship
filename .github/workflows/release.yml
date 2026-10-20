@@ -117,7 +117,7 @@ jobs:
           ref: ${{ needs.validate-release.outputs.ref }}
           persist-credentials: false
 
-      - uses: prefix-dev/setup-pixi@d3f436a425481402e6a95a1d1fc10331c708cd9e # v0.10.2
+      - uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
         with:
           cache: false
 
@@ -179,7 +179,7 @@ jobs:
         with:
           subject-path: release-assets/*
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-assets-${{ matrix.target }}
           path: release-assets/*
@@ -197,7 +197,7 @@ jobs:
       artifact-metadata: write # create artifact storage records for attestations
 
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release-assets-*
           path: release-assets
@@ -222,7 +222,7 @@ jobs:
 
       - name: Upload candidate release assets
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-candidate-${{ needs.validate-release.outputs.version }}
           path: release-assets/*
@@ -366,7 +366,7 @@ jobs:
         with:
           subject-path: dist-pypi/*.whl
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pypi-wheel-${{ matrix.target }}
           path: dist-pypi/*.whl
@@ -384,13 +384,13 @@ jobs:
           ref: ${{ needs.validate-release.outputs.ref }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist-pypi
           pattern: "pypi-*"
           merge-multiple: true
 
-      - uses: prefix-dev/setup-pixi@d3f436a425481402e6a95a1d1fc10331c708cd9e # v0.10.2
+      - uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
         with:
           environments: test ship
           cache: false
@@ -454,7 +454,7 @@ jobs:
         with:
           subject-path: dist-pypi/*.tar.gz
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pypi-sdist
           path: dist-pypi/*.tar.gz
@@ -477,7 +477,7 @@ jobs:
       url: https://pypi.org/project/conda-ship/
 
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist-pypi
           pattern: "pypi-*"
@@ -500,7 +500,7 @@ jobs:
     steps:
       - name: Download candidate release assets
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-candidate-${{ needs.validate-release.outputs.version }}
           path: release-assets
@@ -699,7 +699,7 @@ jobs:
 
       - name: Download candidate assets
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-candidate-${{ needs.validate-release.outputs.version }}
           path: candidate-assets
