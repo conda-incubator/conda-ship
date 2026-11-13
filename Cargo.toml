@@ -118,5 +118,5 @@ opt-level = "z"
 assert_cmd = "2"
 insta = { version = "1", features = ["yaml"] }
 predicates = "3"
-rstest = "0.27"
+rstest = "0.28"
 temp-env = "0.3"
